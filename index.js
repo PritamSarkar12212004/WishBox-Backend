@@ -9,6 +9,7 @@ import userRoute from "./src/routes/user/userRoute.js";
 import userAuthRoute from "./src/routes/user/userAuthRoute.js";
 import productFinder from "./src/routes/product/productFinder.js";
 import cart_like from "./src/routes/Cart__Like/cart_like.js";
+import authRoute from './src/routes/auth/authRoute.js'
 const app = express();
 app.use(cors());
 app.use(express.json());
@@ -20,6 +21,7 @@ app.use("/register", userRoute);
 app.use("/auth", userAuthRoute);
 app.use("/find", productFinder);
 app.use("/shoping", cart_like);
+app.use("/auth", authRoute);
 
 dataBase(
   app.listen(3000, () => {
