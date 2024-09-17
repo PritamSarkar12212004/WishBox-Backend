@@ -29,6 +29,12 @@ const productSchema = new mongoose.Schema(
       type: Array,
       required: true,
     },
+    likes: {
+      type: Array,
+    },
+    carts: {
+      type: Array,
+    },
   },
   { timestamps: true }
 );
