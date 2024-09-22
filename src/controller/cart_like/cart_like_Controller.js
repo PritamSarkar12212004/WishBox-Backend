@@ -88,5 +88,5 @@ export {
   cartControllerRemover,
   cartCheker,
   cartPage,
-  likePage
+  likePage,
 };
