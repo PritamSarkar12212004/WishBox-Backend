@@ -33,6 +33,17 @@ const likeCheker = async (req, res) => {
     res.send(true);
   }
 };
+const likeCheker2 = async (req, res) => {
+  const data = await req.body;
+  const productId = await data.data._id;
+  const userId = await data._id;
+  const response = await Product.findOne({ _id: productId, likes: userId });
+  if (!response) {
+    res.send(false);
+  } else {
+    res.send(true);
+  }
+};
 const cartController = async (req, res) => {
   const data = await req.body;
   const productId = await data.data._id;
@@ -89,4 +100,5 @@ export {
   cartCheker,
   cartPage,
   likePage,
+  likeCheker2
 };

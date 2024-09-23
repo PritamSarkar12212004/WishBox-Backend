@@ -1,6 +1,7 @@
 import User from "../../model/user/userModel.js";
 const authAdminController = async (req, res) => {
   const data = await req.body;
+  console.log(data)
   const response = await User.findOne(data);
   
   if (
