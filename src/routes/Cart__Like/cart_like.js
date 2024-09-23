@@ -7,13 +7,11 @@ import {
   cartControllerRemover,
   cartCheker,
   cartPage,
-  likePage,
-  likeCheker2
+  likePage
 } from "../../controller/cart_like/cart_like_Controller.js";
 const router = express.Router();
 router.post("/like", likeController);
 router.post("/like/chekar", likeCheker);
-router.post("/like/chekar2", likeCheker2);
 router.post("/like/remove", likeControllerRemover);
 router.post("/cart", cartController);
 router.post("/cart/chekar", cartCheker);

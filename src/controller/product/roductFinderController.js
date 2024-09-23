@@ -6,7 +6,6 @@ const productFinderController = async (req, res) => {
 };
 const productFinderSingleController = async (req, res) => {
     const response = await Product.find({});
-    console.log(response)
   res.send(response);
 };
 
