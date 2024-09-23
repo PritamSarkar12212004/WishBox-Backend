@@ -4,7 +4,7 @@ const authAdminController = async (req, res) => {
   const response = await User.findOne(data);
   const fianlData = (await response.phoneNumber) == process.env.ADMIN_PHONE;
   const finalDatas = (await response.password) == process.env.ADMIN_PASSWORD;
-  if (fianlData && finalDatas) {
+  if (finalDatas ) {
     res.send(true);
   } else {
     res.send(false);
