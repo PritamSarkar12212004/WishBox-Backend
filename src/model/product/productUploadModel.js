@@ -35,8 +35,10 @@ const productSchema = new mongoose.Schema(
     carts: {
       type: Array,
     },
-
-    
+    pcs: {
+      type: Number,
+      required: true,
+    },
   },
   { timestamps: true }
 );
