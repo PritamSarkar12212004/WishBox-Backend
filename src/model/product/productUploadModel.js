@@ -15,11 +15,11 @@ const productSchema = new mongoose.Schema(
     },
     ProductLength: {
       type: String,
-      required: true,
+      
     },
     ProductWidth: {
       type: String,
-      required: true,
+      
     },
     ProductDescription: {
       type: String,
