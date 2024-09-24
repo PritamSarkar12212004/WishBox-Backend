@@ -8,6 +8,7 @@ const productUploadController = async (req, res) => {
     ProductLength,
     ProductWidth,
     ProductDescription,
+    pcs,
   } = data;
   const { uploadedImageURLs } = await req.body;
   const response = await Product.insertMany({
@@ -17,6 +18,7 @@ const productUploadController = async (req, res) => {
     ProductLength,
     ProductWidth,
     ProductDescription,
+    pcs,
     uploadedImageURLs,
   });
   res.json(response);
