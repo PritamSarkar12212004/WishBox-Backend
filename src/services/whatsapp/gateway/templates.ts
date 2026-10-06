@@ -28,9 +28,18 @@ export function mergeOtpVariables(
   return merged;
 }
 
+/**
+ * Variables for the welcome template sent after a shopper signs in. The keys
+ * (`email`, `insta`, `phoneSupport`) are the approved template's placeholders
+ * and must stay in sync with it.
+ */
+export function signupVariables(): GatewayVariables {
+  return { ...gatewayConfig.supportContacts };
+}
+
 /** Template id for a notification type, falling back to the booking template. */
 export function templateIdFor(
-  kind: 'otp' | 'booking' | 'admin',
+  kind: 'otp' | 'signup' | 'booking' | 'admin',
   override?: string,
 ): string {
   if (override?.trim()) return override.trim();
@@ -38,6 +47,8 @@ export function templateIdFor(
   switch (kind) {
     case 'otp':
       return gatewayConfig.otpTemplateId;
+    case 'signup':
+      return gatewayConfig.signupTemplateId;
     case 'admin':
       return gatewayConfig.adminTemplateId ?? gatewayConfig.bookingTemplateId;
     case 'booking':

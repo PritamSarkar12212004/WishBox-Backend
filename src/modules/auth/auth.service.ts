@@ -2,7 +2,7 @@ import { randomInt } from 'node:crypto';
 import bcrypt from 'bcrypt';
 import { env } from '../../config/env.js';
 import { createChildLogger } from '../../config/logger.js';
-import { sendOtpCode } from '../../services/whatsapp/index.js';
+import { sendOtpCode, sendSignupWelcome } from '../../services/whatsapp/index.js';
 import { ERROR_CODES, HTTP_STATUS, OTP_LENGTH } from '../../consts/constants.js';
 import { AppError, BadRequestError, ForbiddenError, UnauthorizedError } from '../../shared/errors.js';
 import {
@@ -116,7 +116,13 @@ export async function requestOtp(phone: string): Promise<RequestOtpResult> {
 // ---------------------------------------------------------------------------
 // Step 2 - verify the code, then find or create the shopper
 // ---------------------------------------------------------------------------
-async function findOrCreateUser(phone: string, name?: string): Promise<UserDocument> {
+interface ShopperLookup {
+  user: UserDocument;
+  /** True only when this call created the account. */
+  isNewUser: boolean;
+}
+
+async function findOrCreateUser(phone: string, name?: string): Promise<ShopperLookup> {
   const now = new Date();
   const existing = await UserModel.findOne({ phone });
 
@@ -133,19 +139,21 @@ async function findOrCreateUser(phone: string, name?: string): Promise<UserDocum
     existing.phoneVerifiedAt = now;
     existing.lastLoginAt = now;
     await existing.save();
-    return existing;
+    return { user: existing, isNewUser: false };
   }
 
   if (!name) {
     throw new BadRequestError('Your name is required to create an account');
   }
 
-  return UserModel.create({
+  const created = await UserModel.create({
     name,
     phone,
     phoneVerifiedAt: now,
     lastLoginAt: now,
   });
+
+  return { user: created, isNewUser: true };
 }
 
 async function issueSession(user: UserDocument, context: RequestContext): Promise<AuthSession> {
@@ -239,10 +247,23 @@ export async function verifyOtp(
     );
   }
 
-  const user = await findOrCreateUser(phone, name);
+  const { user, isNewUser } = await findOrCreateUser(phone, name);
   const session = await issueSession(user, context);
 
-  log.info({ userId: user.id, phone }, 'Shopper signed in');
+  // Sent on *every* successful verify, for a returning shopper as well as a
+  // brand-new one - that is the agreed product behavior for this template.
+  //
+  // Deliberately not awaited: the session is already issued, so a slow or dead
+  // gateway must never delay or fail the sign-in. `sendSignupWelcome` never
+  // throws on a delivery failure; the catch only guards the promise itself.
+  void sendSignupWelcome(phone).catch((error: unknown) => {
+    log.error(
+      { phone, message: error instanceof Error ? error.message : String(error) },
+      'Welcome message could not be sent',
+    );
+  });
+
+  log.info({ userId: user.id, phone, isNewUser }, 'Shopper signed in');
   return session;
 }
 

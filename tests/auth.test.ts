@@ -21,6 +21,12 @@ process.env.SMS_API_URL = 'https://gateway.test/api/messaging/messages/send';
 process.env.SMS_API_TOKEN = 'test-gateway-token';
 // Pinned so the assertion below does not depend on the local `.env`.
 process.env.SMS_API_VARIABLES_KEY = 'otpdev';
+// The post-verify welcome template and its contacts, pinned for the same
+// reason: these assertions must not depend on the local `.env`.
+process.env.SMS_SIGNUP_TEMPLATE_ID = 'signup-template-id';
+process.env.SMS_SUPPORT_EMAIL = 'hello@wishbox.in';
+process.env.SMS_SUPPORT_INSTA = '@wishbox';
+process.env.SMS_SUPPORT_PHONE = '+91 98765 43210';
 
 const { MongoMemoryServer } = await import('mongodb-memory-server');
 const mongod = await MongoMemoryServer.create();
@@ -34,11 +40,24 @@ const { httpClient } = await import('../src/shared/httpClient.js');
 const { createHttpMock } = await import('./helpers/http-mock.js');
 
 const GATEWAY_URL = 'https://gateway.test/api/messaging/messages/send';
+const SIGNUP_TEMPLATE = 'signup-template-id';
 
-/** The gateway always accepts here; its own failure modes are covered in
- * whatsapp.gateway.test.ts. */
+/**
+ * The gateway accepts everything here; its own failure modes are covered in
+ * whatsapp.gateway.test.ts. A test can push a template id in here to make just
+ * that one send fail, which is how the fire-and-forget welcome message is
+ * checked for not breaking a login.
+ */
+const failingTemplates = new Set<string>();
+
 const gateway = createHttpMock(httpClient);
-gateway.onPost(GATEWAY_URL).reply(200, { message: 'queued' });
+gateway.onPost(GATEWAY_URL).reply((config) => {
+  const payload = JSON.parse(String(config.data ?? '{}')) as { template?: string };
+
+  return failingTemplates.has(payload.template ?? '')
+    ? [500, { error: 'boom' }]
+    : [200, { message: 'queued' }];
+});
 
 let server: Server;
 let baseUrl: string;
@@ -155,6 +174,41 @@ let phoneCounter = 0;
 function nextPhone(): string {
   phoneCounter += 1;
   return `9${String(100000000 + phoneCounter).slice(0, 9)}`;
+}
+
+interface GatewayCall {
+  to: string;
+  template: string;
+  variables: Record<string, string>;
+  media: { url: string };
+}
+
+/**
+ * The welcome message is sent fire-and-forget, so it can land after the verify
+ * response has already been returned. Poll the mock until it shows up.
+ */
+async function waitForGatewayTemplate(
+  template: string,
+  timeoutMs = 2000,
+): Promise<GatewayCall> {
+  const deadline = Date.now() + timeoutMs;
+
+  for (;;) {
+    const call = gateway.history.post
+      .map((request) => {
+        try {
+          return JSON.parse(String(request.data)) as GatewayCall;
+        } catch {
+          return null;
+        }
+      })
+      .find((payload) => payload?.template === template);
+
+    if (call) return call;
+    if (Date.now() > deadline) assert.fail(`no gateway call for template ${template}`);
+
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -331,6 +385,63 @@ describe('POST /auth/otp/verify', () => {
     const second = await post('/api/v1/auth/otp/verify', { phone, code, name: 'One Time' });
     assert.equal(second.status, 400);
     assert.equal(second.body.error?.code, 'OTP_EXPIRED');
+  });
+
+  it('welcomes a brand new shopper once the code is verified', async () => {
+    const phone = nextPhone();
+    gateway.resetHistory();
+
+    await signIn(phone, 'Welcome Shopper');
+
+    const call = await waitForGatewayTemplate(SIGNUP_TEMPLATE);
+    assert.equal(call.to, `91${phone}`);
+    assert.deepEqual(call.variables, {
+      email: 'hello@wishbox.in',
+      insta: '@wishbox',
+      phoneSupport: '+91 98765 43210',
+    });
+    // The gateway rejects a template whose header media is missing.
+    assert.ok(call.media.url);
+  });
+
+  it('welcomes a returning shopper again on the next sign-in', async () => {
+    const phone = nextPhone();
+    await signIn(phone, 'Returning Shopper');
+    // Drain the first-run welcome so nothing from it can leak into the count.
+    await waitForGatewayTemplate(SIGNUP_TEMPLATE);
+
+    gateway.resetHistory();
+    await OtpModel.deleteOne({ phone });
+    await signIn(phone, 'Returning Shopper');
+
+    // Every successful verify sends the welcome - not just the first one - so
+    // this sign-in posts the login code and then the welcome template.
+    const call = await waitForGatewayTemplate(SIGNUP_TEMPLATE);
+    assert.equal(call.to, `91${phone}`);
+    assert.equal(gateway.history.post.length, 2, 'login code + welcome');
+  });
+
+  it('still signs in when the welcome message is rejected', async () => {
+    const phone = nextPhone();
+    const code = await requestCode(phone);
+    gateway.resetHistory();
+    failingTemplates.add(SIGNUP_TEMPLATE);
+
+    try {
+      const { status, body } = await post<SessionData>('/api/v1/auth/otp/verify', {
+        phone,
+        code,
+        name: 'Resilient Shopper',
+      });
+
+      assert.equal(status, 200, JSON.stringify(body));
+      assert.ok(body.data?.accessToken, 'the session must still be issued');
+
+      // The failed welcome message is logged, never surfaced.
+      await waitForGatewayTemplate(SIGNUP_TEMPLATE);
+    } finally {
+      failingTemplates.delete(SIGNUP_TEMPLATE);
+    }
   });
 });
 

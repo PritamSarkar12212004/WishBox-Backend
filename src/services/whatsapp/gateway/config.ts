@@ -23,7 +23,18 @@ export const gatewayConfig = Object.freeze({
   variablesKey: env.SMS_API_VARIABLES_KEY,
 
   otpTemplateId: env.SMS_OTP_TEMPLATE_ID,
+  signupTemplateId: env.SMS_SIGNUP_TEMPLATE_ID,
   bookingTemplateId: env.SMS_BOOKING_TEMPLATE_ID,
+
+  /**
+   * The signup template's contacts. Keys are the template's placeholders, so
+   * they are kept verbatim and are never renamed by a caller.
+   */
+  supportContacts: Object.freeze({
+    email: env.SMS_SUPPORT_EMAIL,
+    insta: env.SMS_SUPPORT_INSTA,
+    phoneSupport: env.SMS_SUPPORT_PHONE,
+  }),
   adminTemplateId: optional(env.SMS_ADMIN_TEMPLATE_ID),
   bookingApiUrl: optional(env.SMS_BOOKING_API_URL),
 

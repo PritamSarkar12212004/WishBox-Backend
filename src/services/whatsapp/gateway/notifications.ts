@@ -2,7 +2,7 @@ import { createChildLogger } from '../../../config/logger.js';
 import { BadRequestError } from '../../../shared/errors.js';
 import { postTemplateMessage } from './client.js';
 import { gatewayConfig } from './config.js';
-import { templateIdFor } from './templates.js';
+import { signupVariables, templateIdFor } from './templates.js';
 import type { GatewaySendResult, GatewayTemplateRequest } from './types.js';
 
 const log = createChildLogger('whatsapp:notifications');
@@ -54,4 +54,23 @@ export async function sendTemplateNotification(
     log.error({ label, message }, `${label} message failed`);
     return { success: false, message };
   }
+}
+
+/**
+ * Welcome message sent after a shopper's login code has been verified: the
+ * approved signup template, filled with the storefront's support contacts.
+ *
+ * Inherits the never-throws contract above, so a slow or dead gateway cannot
+ * turn a successful sign-in into an error response — the shopper is already
+ * signed in by the time this runs.
+ */
+export async function sendSignupWelcome(phone: string): Promise<GatewaySendResult> {
+  return sendTemplateNotification({
+    phone,
+    templateId: templateIdFor('signup'),
+    variables: signupVariables(),
+    label: 'signup welcome',
+    // Pinned to the main gateway: the booking override must not capture it.
+    apiUrl: gatewayConfig.apiUrl,
+  });
 }

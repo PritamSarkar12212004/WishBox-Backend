@@ -84,7 +84,17 @@ const envSchema = z
      */
     SMS_API_VARIABLES_KEY: z.string().trim().default('otpdev'),
     SMS_OTP_TEMPLATE_ID: z.string().trim().default('6ac4b0ea957ea5b2decee9ee'),
+    /** Sent right after a successful sign-in (welcome / contact template). */
+    SMS_SIGNUP_TEMPLATE_ID: z.string().trim().default('6ac4c92f957ea5b2deceea92'),
     SMS_BOOKING_TEMPLATE_ID: z.string().trim().default('6aad0af6fdcd1a027b9e4389'),
+    /**
+     * Contacts injected into the signup template. The three names must match
+     * the approved template's placeholders (`email`, `insta`, `phoneSupport`);
+     * a mismatch delivers an empty slot instead of failing.
+     */
+    SMS_SUPPORT_EMAIL: z.string().trim().default('sample_email'),
+    SMS_SUPPORT_INSTA: z.string().trim().default('sample_insta'),
+    SMS_SUPPORT_PHONE: z.string().trim().default('sample_phoneSupport'),
     SMS_ADMIN_TEMPLATE_ID: z.string().trim().optional(),
     /** Booking confirmations can go to a different gateway instance. */
     SMS_BOOKING_API_URL: z.string().trim().optional(),

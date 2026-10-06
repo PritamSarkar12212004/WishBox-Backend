@@ -9,6 +9,10 @@ process.env.SMS_API_URL = 'https://gateway.test/api/messaging/messages/send';
 process.env.SMS_API_TOKEN = 'test-gateway-token';
 process.env.SMS_API_VARIABLES_KEY = 'code';
 process.env.SMS_OTP_TEMPLATE_ID = 'otp-template-id';
+process.env.SMS_SIGNUP_TEMPLATE_ID = 'signup-template-id';
+process.env.SMS_SUPPORT_EMAIL = 'hello@wishbox.in';
+process.env.SMS_SUPPORT_INSTA = '@wishbox';
+process.env.SMS_SUPPORT_PHONE = '+91 98765 43210';
 process.env.SMS_BOOKING_TEMPLATE_ID = 'booking-template-id';
 process.env.SMS_ADMIN_TEMPLATE_ID = '';
 process.env.SMS_BOOKING_API_URL = '';
@@ -17,7 +21,7 @@ process.env.SMS_TIMEOUT_MS = '5000';
 process.env.SMS_MAX_ATTEMPTS = '2';
 
 const { sendOtpCode } = await import('../src/services/whatsapp/index.js');
-const { sendTemplateNotification } = await import(
+const { sendSignupWelcome, sendTemplateNotification } = await import(
   '../src/services/whatsapp/gateway/notifications.js'
 );
 const { toGatewayNumber, maskNumber } = await import(
@@ -81,6 +85,10 @@ describe('gateway number formatting', () => {
 describe('template ids', () => {
   it('uses the configured OTP template', () => {
     assert.equal(templateIdFor('otp'), 'otp-template-id');
+  });
+
+  it('uses the configured signup template', () => {
+    assert.equal(templateIdFor('signup'), 'signup-template-id');
   });
 
   it('falls back to the booking template when the admin one is blank', () => {
@@ -214,5 +222,43 @@ describe('sendTemplateNotification', () => {
       () => sendTemplateNotification({ phone: '', variables: {} }),
       (error: unknown) => isAppError(error) && error.statusCode === 400,
     );
+  });
+});
+
+describe('sendSignupWelcome', () => {
+  it('posts the signup template with the support contacts', async () => {
+    mock.onPost(GATEWAY_URL).reply(200, { message: 'queued' });
+
+    const result = await sendSignupWelcome('9876543210');
+
+    assert.equal(result.success, true);
+
+    const payload = firstPayload();
+    assert.equal(payload.to, '919876543210');
+    assert.equal(payload.template, 'signup-template-id');
+    assert.deepEqual(payload.variables, {
+      email: 'hello@wishbox.in',
+      insta: '@wishbox',
+      phoneSupport: '+91 98765 43210',
+    });
+    assert.equal(payload.media.url, 'https://cdn.test/header.jpg');
+  });
+
+  it('never throws when the gateway rejects the welcome message', async () => {
+    mock.onPost(GATEWAY_URL).reply(400, { error: 'template not found' });
+
+    const result = await sendSignupWelcome('9876543210');
+
+    assert.equal(result.success, false);
+    assert.equal(result.statusCode, 400);
+  });
+
+  it('never throws when the gateway is unreachable', async () => {
+    mock.onPost(GATEWAY_URL).networkError();
+
+    const result = await sendSignupWelcome('9876543210');
+
+    assert.equal(result.success, false);
+    assert.ok(result.message);
   });
 });

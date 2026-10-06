@@ -35,6 +35,11 @@ src/
 └── server.ts     bootstrap + graceful shutdown
 ```
 
+## API reference
+
+Every auth endpoint with real captured request/response examples and copy-paste
+`curl` recipes: [`docs/auth-api.md`](docs/auth-api.md).
+
 ## Conventions
 
 **Environment** – every variable is validated by zod in `config/env.ts`.
@@ -152,9 +157,10 @@ src/services/whatsapp/gateway/
 `SMS_API_TOKEN` is required — env validation refuses to boot without it,
 because there is no fallback transport and a missing token would otherwise
 surface as a 500 at the first login. Everything else has a working default:
-`SMS_API_URL`, `SMS_OTP_TEMPLATE_ID`, `SMS_BOOKING_TEMPLATE_ID`,
-`SMS_MEDIA_URL`, `SMS_TIMEOUT_MS` (30s — the gateway's free tier cold-starts),
-`SMS_MAX_ATTEMPTS`.
+`SMS_API_URL`, `SMS_OTP_TEMPLATE_ID`, `SMS_SIGNUP_TEMPLATE_ID`,
+`SMS_BOOKING_TEMPLATE_ID`, `SMS_SUPPORT_EMAIL` / `SMS_SUPPORT_INSTA` /
+`SMS_SUPPORT_PHONE`, `SMS_MEDIA_URL`, `SMS_TIMEOUT_MS` (30s — the gateway's
+free tier cold-starts), `SMS_MAX_ATTEMPTS`.
 
 Notes worth knowing before touching this module:
 
@@ -182,6 +188,24 @@ confirmation, admin alerts). It **never throws** on a gateway failure — it is
 called after a business action has already succeeded, so a dead gateway must
 not fail that action. The caller supplies the template's placeholder
 `variables`, since those keys belong to the template, not to the transport.
+
+`sendSignupWelcome()` is the same thing for the sign-in flow: after
+`POST /auth/otp/verify` returns success, the shopper gets one extra template
+message (`SMS_SIGNUP_TEMPLATE_ID`) carrying the storefront's support contacts
+(`SMS_SUPPORT_EMAIL`, `SMS_SUPPORT_INSTA`, `SMS_SUPPORT_PHONE`).
+
+It runs **fire-and-forget** — the session is already issued when it is called,
+so a slow gateway adds no latency to a login and a failing one cannot fail it.
+It goes to `SMS_API_URL`, never to the booking override.
+
+It is sent on **every** successful verify, for a returning shopper as well as a
+brand-new one. Despite the `SMS_SIGNUP_*` / `sendSignupWelcome` naming (kept so
+the env var does not churn), it is not limited to account creation — change
+that deliberately if the product decision changes.
+
+The template is a *dev* one, so the gateway stores no media for it: the header
+image must be supplied on every send via `SMS_MEDIA_URL`. Its `phoneSupport`
+placeholder is rendered after a hard-coded `+91`, so give it digits only.
 
 ## Outbound HTTP
 

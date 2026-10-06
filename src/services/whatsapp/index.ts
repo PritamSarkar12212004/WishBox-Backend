@@ -7,7 +7,7 @@
  */
 import { GatewayWhatsAppProvider } from './gateway/provider.js';
 
-export { sendTemplateNotification } from './gateway/notifications.js';
+export { sendSignupWelcome, sendTemplateNotification } from './gateway/notifications.js';
 export { gatewayConfig, requireToken } from './gateway/config.js';
 export { GatewayWhatsAppProvider } from './gateway/provider.js';
 export { WhatsAppDeliveryError } from './whatsapp.errors.js';
