@@ -66,6 +66,21 @@ const envSchema = z
      */
     ADMIN_PHONES: z.string().trim().default('7796419792'),
 
+    // --- Cloudinary (image storage) -----------------------------------------
+    /**
+     * Image storage for product media and refund/payout proofs. The cloud name
+     * and API key identify the WishBox product environment; the secret is what
+     * authorises a *signed* upload. Without all three, uploads stay disabled
+     * rather than failing halfway through.
+     */
+    CLOUDINARY_CLOUD_NAME: z.string().trim().default(''),
+    CLOUDINARY_API_KEY: z.string().trim().default(''),
+    CLOUDINARY_API_SECRET: z.string().trim().default(''),
+    /** The label the key carries in the Cloudinary console; informational only. */
+    CLOUDINARY_KEY_NAME: z.string().trim().default(''),
+    /** Every WishBox upload is scoped to this folder. */
+    CLOUDINARY_FOLDER: z.string().trim().default('wishbox'),
+
     // --- OTP ---------------------------------------------------------------
     OTP_TTL_SECONDS: z.coerce.number().int().min(60).max(3600).default(300),
     OTP_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(10).default(5),
@@ -159,8 +174,28 @@ export const adminPhones: string[] = data.ADMIN_PHONES.split(',')
   .map((phone) => phone.replace(/\D/g, '').slice(-10))
   .filter((phone) => /^[6-9]\d{9}$/.test(phone));
 
+/**
+ * Cloudinary upload config.
+ *
+ * `enabled` is false until every credential is present, so a half-configured
+ * environment cannot produce a silently broken upload - a caller checks
+ * `cloudinary.enabled` first and skips storage entirely when it is false.
+ */
+export const cloudinary = Object.freeze({
+  cloudName: data.CLOUDINARY_CLOUD_NAME,
+  apiKey: data.CLOUDINARY_API_KEY,
+  apiSecret: data.CLOUDINARY_API_SECRET,
+  keyName: data.CLOUDINARY_KEY_NAME,
+  folder: data.CLOUDINARY_FOLDER,
+  enabled:
+    data.CLOUDINARY_CLOUD_NAME.length > 0 &&
+    data.CLOUDINARY_API_KEY.length > 0 &&
+    data.CLOUDINARY_API_SECRET.length > 0,
+});
+
 export const env = Object.freeze({
   ...data,
+  cloudinary,
   IS_PRODUCTION: data.NODE_ENV === 'production',
   IS_DEVELOPMENT: data.NODE_ENV === 'development',
   IS_TEST: data.NODE_ENV === 'test',

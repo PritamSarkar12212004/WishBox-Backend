@@ -163,6 +163,26 @@ scoped by the signed-in shopper's `userId`, so an id belonging to somebody else
 is a `404` indistinguishable from a missing one. A malformed id is a `422`, and
 a book is capped at **10 addresses** (`409` past that).
 
+## Image storage (Cloudinary)
+
+The product environment (cloud name) and API key are configured, and the secret
+is what authorises a **signed** upload:
+
+```
+CLOUDINARY_CLOUD_NAME=dftt4ow6q
+CLOUDINARY_API_KEY=669666261897963
+CLOUDINARY_KEY_NAME=Cloud_Image
+CLOUDINARY_API_SECRET=
+CLOUDINARY_FOLDER=wishbox
+```
+
+They are parsed and validated in `src/config/env.ts` and exported as
+`cloudinary` / `env.cloudinary`. `cloudinary.enabled` is **false until all three
+credentials are present**, so a half-configured environment cannot produce a
+silently broken upload — a caller checks `enabled` first and skips storage
+entirely when it is false. Leaving `CLOUDINARY_API_SECRET` blank therefore keeps
+uploads off without breaking the rest of the API.
+
 ## Admin panel API
 
 Who gets the panel is configuration, not data. Add the WhatsApp numbers to
