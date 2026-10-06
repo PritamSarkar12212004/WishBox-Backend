@@ -36,7 +36,8 @@ export interface RequestContext {
 
 export interface RequestOtpResult {
   phone: string;
-  channel: 'sms' | 'whatsapp';
+  /** The gateway delivers over WhatsApp only. */
+  channel: 'whatsapp';
   expiresInSeconds: number;
   resendAfterSeconds: number;
   isNewUser: boolean;
@@ -95,11 +96,11 @@ export async function requestOtp(phone: string): Promise<RequestOtpResult> {
   }
 
   const isNewUser = (await UserModel.exists({ phone })) === null;
-  log.info({ phone, channel: env.AUTH_CHANNEL, isNewUser }, 'OTP requested');
+  log.info({ phone, isNewUser }, 'OTP requested');
 
   const result: RequestOtpResult = {
     phone,
-    channel: env.AUTH_CHANNEL,
+    channel: 'whatsapp',
     expiresInSeconds: env.OTP_TTL_SECONDS,
     resendAfterSeconds: env.OTP_RESEND_COOLDOWN_SECONDS,
     isNewUser,

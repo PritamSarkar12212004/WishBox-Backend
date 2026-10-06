@@ -15,6 +15,12 @@ import type { AddressInfo } from 'node:net';
 process.env.NODE_ENV = 'test';
 // Lets the tests read the generated code back from the API response.
 process.env.OTP_DEBUG_RETURN_CODE = 'true';
+// Point the login-code transport at a fake host: every send below is
+// intercepted, so these tests never reach the real WhatsApp gateway.
+process.env.SMS_API_URL = 'https://gateway.test/api/messaging/messages/send';
+process.env.SMS_API_TOKEN = 'test-gateway-token';
+// Pinned so the assertion below does not depend on the local `.env`.
+process.env.SMS_API_VARIABLES_KEY = 'otpdev';
 
 const { MongoMemoryServer } = await import('mongodb-memory-server');
 const mongod = await MongoMemoryServer.create();
@@ -24,6 +30,15 @@ const { connectDatabase, disconnectDatabase } = await import('../src/config/data
 const { createApp } = await import('../src/app.js');
 const { OtpModel } = await import('../src/modules/auth/otp.model.js');
 const { UserModel } = await import('../src/modules/user/user.model.js');
+const { httpClient } = await import('../src/shared/httpClient.js');
+const { createHttpMock } = await import('./helpers/http-mock.js');
+
+const GATEWAY_URL = 'https://gateway.test/api/messaging/messages/send';
+
+/** The gateway always accepts here; its own failure modes are covered in
+ * whatsapp.gateway.test.ts. */
+const gateway = createHttpMock(httpClient);
+gateway.onPost(GATEWAY_URL).reply(200, { message: 'queued' });
 
 let server: Server;
 let baseUrl: string;
@@ -42,6 +57,7 @@ after(async () => {
   );
   await disconnectDatabase();
   await mongod.stop();
+  gateway.restore();
 });
 
 // ---------------------------------------------------------------------------
@@ -155,6 +171,26 @@ describe('POST /auth/otp/request', () => {
     assert.equal(body.data?.channel, 'whatsapp');
     assert.equal(body.data?.resendAfterSeconds, 30);
     assert.equal(body.data?.isNewUser, true);
+  });
+
+  it('delivers the code through the WhatsApp gateway template', async () => {
+    const phone = nextPhone();
+    gateway.resetHistory();
+
+    const { body } = await post<OtpRequestData>('/api/v1/auth/otp/request', { phone });
+
+    const sent = gateway.history.post.at(-1);
+    assert.ok(sent, 'the gateway was never called');
+    assert.equal(String(sent.url), GATEWAY_URL);
+
+    const payload = JSON.parse(String(sent.data)) as {
+      to: string;
+      template: string;
+      variables: Record<string, string>;
+    };
+    assert.equal(payload.to, `91${phone}`);
+    // The code must land under the placeholder the gateway's template declares.
+    assert.deepEqual(payload.variables, { otpdev: body.data?.devCode });
   });
 
   it('never stores the code in plain text', async () => {

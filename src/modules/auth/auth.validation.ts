@@ -1,11 +1,6 @@
 import { z } from 'zod';
 import { OTP_CODE_REGEX, OTP_LENGTH, PHONE_REGEX } from '../../consts/constants.js';
 
-/**
- * Mirrors `normalizePhone` in the storefront (src/modules/auth/lib/otp.ts):
- * digits only, drop a leading country code when it wraps a 10-digit number,
- * then keep the last ten.
- */
 const normalizePhone = (value: string): string =>
   value
     .replace(/\D/g, '')
@@ -28,13 +23,11 @@ const name = z
   .min(2, 'Name must be at least 2 characters')
   .max(80, 'Name must be at most 80 characters');
 
-/** Step one: the shopper gives their name and WhatsApp number. */
 export const requestOtpSchema = z.object({
   phone,
   name: name.optional(),
 });
 
-/** Step two: the six-digit code from the message. */
 export const verifyOtpSchema = z.object({
   phone,
   code: z
@@ -50,7 +43,6 @@ export const refreshTokenSchema = z.object({
 
 export const logoutSchema = z.object({
   refreshToken: z.string().trim().min(10).optional(),
-  /** Sign out of every device instead of just this one. */
   allDevices: z.boolean().optional(),
 });
 

@@ -16,7 +16,8 @@ npm run dev            # http://localhost:5000
 | `npm run build`     | Compile TypeScript to `dist/`                  |
 | `npm start`         | Run the compiled server (`node dist/server.js`)|
 | `npm run typecheck` | Type-check without emitting                    |
-| `npm test`          | Test suite (HTTP layer, auth flow, Twilio)     |
+| `npm test`          | Test suite (HTTP layer, auth flow, gateway)    |
+| `npm run db:check`  | Diagnose the MongoDB connection layer by layer |
 
 ## Folder structure
 
@@ -24,11 +25,11 @@ npm run dev            # http://localhost:5000
 src/
 ├── config/       env validation, logger, database connection
 ├── middleware/   request logging, error handling, rate limiting, auth guard
-├── shared/       API response format, error classes, JWT helpers
+├── shared/       API response format, error classes, JWT helpers, axios client
 ├── routes/       route definitions (health + feature router mounting)
 ├── modules/      one folder per feature (auth, user, …)
 ├── consts/       shared constants (HTTP statuses, error codes, phone rules)
-├── services/     external integrations (WhatsApp, Shiprocket)
+├── services/     external integrations (WhatsApp gateway, Shiprocket)
 ├── types/        ambient type augmentation (Express Request)
 ├── app.ts        Express app wiring
 └── server.ts     bootstrap + graceful shutdown
@@ -128,22 +129,94 @@ token fails. `AUTH_MAX_SESSIONS` caps how many devices stay signed in.
 - `OTP_DEBUG_RETURN_CODE=true` echoes the code in the response. It is a local
 development convenience and boot **fails** if it is on in production.
 
-### OTP delivery
+### Login code delivery
 
-`WHATSAPP_PROVIDER` selects the transport:
+There is exactly one transport: **Wishbox's own messaging gateway**. It is a
+template-based service — the code is injected into an approved WhatsApp
+template rather than a free-text body, and every template carries a header
+image. `sendOtpCode(phone, code)` is the whole public surface; a new transport
+would mean adding an adapter beside `gateway/provider.ts`, not a config switch.
 
-| Value     | Behaviour                                                        |
-| --------- | ---------------------------------------------------------------- |
-| `console` | **Default.** Prints the code to the log. No account needed.      |
-| `twilio`  | Sends a real WhatsApp or SMS message via the Twilio Messages API.|
+```
+src/services/whatsapp/gateway/
+├── config.ts        every setting, resolved once from validated env
+├── phone.ts         number formatting for this gateway
+├── templates.ts     template ids + placeholder builders
+├── client.ts        the HTTP call, with timeout and retry
+├── provider.ts      the login-code transport
+├── notifications.ts fire-and-forget templates (booking, admin)
+├── types.ts         request/response shapes
+└── index.ts         the module's public surface
+```
 
-For Twilio, set `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` and the sender for
-your channel (`TWILIO_WHATSAPP_FROM`, e.g. `whatsapp:+14155238886` for the
-sandbox, or `TWILIO_SMS_FROM`). Env validation refuses to boot if they are
-missing. Adding another gateway (Meta WhatsApp Cloud API, MSG91, …) means
-implementing `WhatsAppProvider` in `src/services/whatsapp/` and extending the
-enum. Files: `whatsapp.types.ts` (the interface), `console.provider.ts`,
-`twilio.provider.ts`.
+`SMS_API_TOKEN` is required — env validation refuses to boot without it,
+because there is no fallback transport and a missing token would otherwise
+surface as a 500 at the first login. Everything else has a working default:
+`SMS_API_URL`, `SMS_OTP_TEMPLATE_ID`, `SMS_BOOKING_TEMPLATE_ID`,
+`SMS_MEDIA_URL`, `SMS_TIMEOUT_MS` (30s — the gateway's free tier cold-starts),
+`SMS_MAX_ATTEMPTS`.
+
+Notes worth knowing before touching this module:
+
+- The token lives in `SMS_API_TOKEN`, never in source. It is a bearer
+credential — rotate it if it has ever been shared.
+- `SMS_API_VARIABLES_KEY` naming the code placeholder must match the approved
+ template (`otpdev` for the OTP one). A mismatch sends a message with an empty
+ code slot instead of failing, so it is worth checking after any template
+ change.
+- `SMS_MEDIA_URL` must be a public absolute URL; the gateway rejects a template
+whose header media is missing or relative.
+- Retries are bounded (`SMS_MAX_ATTEMPTS`), because a cold start on the free
+tier can hang for 30s+ and a login must not hang with it.
+- Before trusting a new `SMS_API_URL` (a restarted local tunnel, say), POST a
+ body with an empty `to`. A real gateway answers with a validation error such
+ as `"to" is not allowed to be empty`; a generic `200` means the address is
+ not the messaging service and every send would be silently "successful".
+- A rejected login code throws a `502 WHATSAPP_DELIVERY_FAILED`. The gateway's
+raw response body stays in the logs and is never echoed to the client.
+
+#### Business notifications
+
+`sendTemplateNotification()` covers the non-login flows (booking
+confirmation, admin alerts). It **never throws** on a gateway failure — it is
+called after a business action has already succeeded, so a dead gateway must
+not fail that action. The caller supplies the template's placeholder
+`variables`, since those keys belong to the template, not to the transport.
+
+## Outbound HTTP
+
+Every third-party API call goes through the shared axios instance in
+`src/shared/httpClient.ts`, so timeouts and error handling have one home:
+
+```ts
+import { describeHttpError, httpClient, httpResponseError } from '../../shared/httpClient.js';
+
+try {
+  const response = await httpClient.post(url, payload, { timeout: 10_000 });
+  // 2xx only
+} catch (error) {
+  const failure = httpResponseError(error);
+  if (failure) {
+    // The host answered with a bad status: `failure.status`, `failure.data`.
+    // Do not retry - a retry will not change the answer.
+  } else {
+    // Unreachable or timed out: safe to retry.
+    log.warn({ reason: describeHttpError(error) }, 'call failed');
+  }
+}
+```
+
+Two deliberate choices:
+
+- **Non-2xx responses throw** (the axios default). A caller that wants a
+  provider's error body asks for it via `httpResponseError()`. Silent failure
+  is worse for payments and shipping than for a notification, so the safe
+  default wins.
+- **`httpResponseError()` doubles as the retry signal.** A response means
+  "don't retry"; its absence means "unreachable, retry".
+
+`describeHttpError()` produces log-safe text (never the response body or
+headers, which may carry credentials).
 
 ## Adding a feature module
 

@@ -25,7 +25,7 @@ export const requestOtp = asyncHandler(async (req, res) => {
 
   sendSuccess(res, result, {
     statusCode: HTTP_STATUS.OK,
-    message: `We sent a code to your ${result.channel === 'whatsapp' ? 'WhatsApp' : 'phone'} number`,
+    message: 'We sent a code to your WhatsApp number',
   });
 });
 

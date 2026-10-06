@@ -64,22 +64,26 @@ const envSchema = z
     /** Development shortcut: include the code in the API response. */
     OTP_DEBUG_RETURN_CODE: booleanFlag('false'),
 
-    // --- Login code delivery -----------------------------------------------
-    // console = log only | gateway = wishbox messaging gateway | twilio
-    WHATSAPP_PROVIDER: z.enum(['console', 'gateway', 'twilio']).default('console'),
-    AUTH_CHANNEL: z.enum(['whatsapp', 'sms']).default('whatsapp'),
+    // --- Login code delivery: Wishbox's own WhatsApp gateway ----------------
+    // The gateway is the only transport, so its token is required below.
 
-    // --- Wishbox messaging gateway (WhatsApp templates) ---------------------
     SMS_API_URL: z
       .string()
       .trim()
       .min(1)
       .default('https://whatsapp-services-8t87.onrender.com/api/messaging/messages/send'),
-    /** Bearer token for the gateway. Required when WHATSAPP_PROVIDER=gateway. */
-    SMS_API_TOKEN: z.string().trim().optional(),
-    /** Template variable that carries the OTP code. */
-    SMS_API_VARIABLES_KEY: z.string().trim().default('code'),
-    SMS_OTP_TEMPLATE_ID: z.string().trim().default('6aa397f544cd4f83cc61db41'),
+    /** Bearer token for the gateway. There is no fallback transport. */
+    SMS_API_TOKEN: z
+      .string()
+      .trim()
+      .min(1, 'SMS_API_TOKEN is required - the gateway is the only login-code transport'),
+    /**
+     * The placeholder that carries the OTP code. It must match the variable
+     * name in the approved template (`otpdev`) - a mismatch delivers a message
+     * with an empty code slot instead of failing.
+     */
+    SMS_API_VARIABLES_KEY: z.string().trim().default('otpdev'),
+    SMS_OTP_TEMPLATE_ID: z.string().trim().default('6ac4b0ea957ea5b2decee9ee'),
     SMS_BOOKING_TEMPLATE_ID: z.string().trim().default('6aad0af6fdcd1a027b9e4389'),
     SMS_ADMIN_TEMPLATE_ID: z.string().trim().optional(),
     /** Booking confirmations can go to a different gateway instance. */
@@ -95,43 +99,8 @@ const envSchema = z
     /** The gateway is on a free tier that can cold-start for 30s+. */
     SMS_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(120_000).default(30_000),
     SMS_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(5).default(2),
-
-    // --- Twilio ------------------------------------------------------------
-    TWILIO_ACCOUNT_SID: z.string().trim().optional(),
-    TWILIO_AUTH_TOKEN: z.string().trim().optional(),
-    TWILIO_SMS_FROM: z.string().trim().optional(),
-    TWILIO_WHATSAPP_FROM: z.string().trim().optional(),
   })
   .superRefine((data, ctx) => {
-    const requireWith = (
-      key: 'TWILIO_ACCOUNT_SID' | 'TWILIO_AUTH_TOKEN' | 'TWILIO_SMS_FROM' | 'TWILIO_WHATSAPP_FROM',
-      message: string,
-    ) => {
-      if (!data[key]) {
-        ctx.addIssue({ code: 'custom', path: [key], message });
-      }
-    };
-
-    if (data.WHATSAPP_PROVIDER === 'gateway') {
-      if (!data.SMS_API_TOKEN) {
-        ctx.addIssue({
-          code: 'custom',
-          path: ['SMS_API_TOKEN'],
-          message: 'Required when WHATSAPP_PROVIDER=gateway',
-        });
-      }
-    }
-
-    if (data.WHATSAPP_PROVIDER === 'twilio') {
-      requireWith('TWILIO_ACCOUNT_SID', 'Required when WHATSAPP_PROVIDER=twilio');
-      requireWith('TWILIO_AUTH_TOKEN', 'Required when WHATSAPP_PROVIDER=twilio');
-      if (data.AUTH_CHANNEL === 'whatsapp') {
-        requireWith('TWILIO_WHATSAPP_FROM', 'Required when AUTH_CHANNEL=whatsapp');
-      } else {
-        requireWith('TWILIO_SMS_FROM', 'Required when AUTH_CHANNEL=sms');
-      }
-    }
-
     if (data.OTP_DEBUG_RETURN_CODE && data.NODE_ENV === 'production') {
       ctx.addIssue({
         code: 'custom',
