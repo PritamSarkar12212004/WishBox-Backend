@@ -99,9 +99,15 @@ header and in the response body, and included in every log line.
 | POST   | `/api/v1/auth/otp/verify`  | –  | Verify the code, create/find the user, issue JWTs |
 | POST   | `/api/v1/auth/refresh`     | –  | Exchange a refresh token for a new pair  |
 | POST   | `/api/v1/auth/logout`      | ✅ | Retire this device (or every device)     |
-| GET    | `/api/v1/auth/me`          | ✅ | Signed-in profile (alias of `/users/me`) |
-| GET    | `/api/v1/users/me`         | ✅ | Signed-in profile                        |
-| PATCH  | `/api/v1/users/me`         | ✅ | Update the display name                  |
+| GET    | `/api/v1/auth/me`          | ✅ | Signed-in profile (alias of `/me`)       |
+| GET    | `/api/v1/me`               | ✅ | Signed-in profile                        |
+| PATCH  | `/api/v1/me`               | ✅ | Update the display name                  |
+| GET    | `/api/v1/users/me`         | ✅ | Signed-in profile (alias of `/me`)       |
+| PATCH  | `/api/v1/users/me`         | ✅ | Update the display name (alias of `/me`) |
+| GET    | `/api/v1/addresses`        | ✅ | The shopper's address book, newest first |
+| POST   | `/api/v1/addresses`        | ✅ | Save a delivery address (201)            |
+| PATCH  | `/api/v1/addresses/:id`    | ✅ | Change one or more fields of an address  |
+| DELETE | `/api/v1/addresses/:id`    | ✅ | Remove an address                        |
 | GET    | `/api/v1/admin/session`    | 🛡️ | Admin identity + confirmation of access  |
 | GET    | `/api/v1/admin/dataset`    | 🛡️ | Everything the admin panel charts, in one call |
 | GET    | `/api/v1/admin/settings`   | 🛡️ | Store settings                           |
@@ -112,6 +118,50 @@ header and in the response body, and included in every log line.
 | DELETE | `/api/v1/admin/reviews/:id`| 🛡️ | Remove a review                          |
 
 ✅ = `Authorization: Bearer <accessToken>` · 🛡️ = the same, **plus** admin access.
+
+`/me` is the customer profile's short path (`/users/me` and `/auth/me` are
+kept as aliases, same handlers).
+
+## Customer profile API
+
+### `GET /api/v1/me`, `PATCH /api/v1/me`
+
+`GET` returns the signed-in shopper (`id`, `name`, `phone`, `role`, timestamps).
+`PATCH` currently edits the display name only - the phone is read-only, because
+changing it would need it verified again:
+
+```bash
+curl -X PATCH http://localhost:5000/api/v1/me \
+  -H "authorization: Bearer $ACCESS" -H 'content-type: application/json' \
+  -d '{"name":"Ananya S. Sharma"}'
+```
+
+### `/api/v1/addresses`
+
+Addresses are stored as **parts**, not one formatted string, because the parts
+are what a form edits and what a courier integration consumes. **Both address
+lines are required** - a building number alone does not get a courier to a door.
+
+```bash
+curl -X POST http://localhost:5000/api/v1/addresses \
+  -H "authorization: Bearer $ACCESS" -H 'content-type: application/json' \
+  -d '{"address1":"12B, Sunrise Apartments","address2":"Dharampeth, Near Ganesh Mandir","city":"Nagpur","state":"Maharashtra","pincode":"440001"}'
+```
+
+The rules the API enforces:
+
+| Field      | Rule                                                              |
+| ---------- | ----------------------------------------------------------------- |
+| `address1` | 4-120 chars                                                       |
+| `address2` | **required**, 3-120 chars (the area, landmark or street)          |
+| `city`     | 2-60 chars                                                        |
+| `state`    | must be an Indian state/UT; canonicalised (`maharashtra` → `Maharashtra`, `jammu & kashmir` → `Jammu and Kashmir`) |
+| `pincode`  | `/^[1-9][0-9]{5}$/` — six digits, never starting with `0`          |
+
+An unknown key is a `422` rather than something quietly stored. Every query is
+scoped by the signed-in shopper's `userId`, so an id belonging to somebody else
+is a `404` indistinguishable from a missing one. A malformed id is a `422`, and
+a book is capped at **10 addresses** (`409` past that).
 
 ## Admin panel API
 

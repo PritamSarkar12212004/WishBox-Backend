@@ -16,7 +16,11 @@ const address1 = z
   .min(4, 'Enter the flat, house or building number')
   .max(120, 'Keep the first address line under 120 characters');
 
-const address2 = z.string().trim().max(120, 'Keep the second address line under 120 characters');
+const address2 = z
+  .string()
+  .trim()
+  .min(3, 'Enter the area, landmark or street')
+  .max(120, 'Keep the second address line under 120 characters');
 
 const city = z
   .string()
@@ -38,8 +42,8 @@ const pincode = z
 
 export const createAddressSchema = z.strictObject({
   address1,
-  /** Optional: plenty of addresses are just one line. */
-  address2: address2.optional(),
+  /** Required: a building number alone does not get a courier to the door. */
+  address2,
   city,
   state,
   pincode,
@@ -48,7 +52,7 @@ export const createAddressSchema = z.strictObject({
 export const updateAddressSchema = z
   .strictObject({
     address1: address1.optional(),
-    /** Sending a blank second line is how the form clears it. */
+    /** Editable like any other field, but never blank when it is sent. */
     address2: address2.optional(),
     city: city.optional(),
     state: state.optional(),

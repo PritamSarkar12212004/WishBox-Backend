@@ -13,8 +13,8 @@ export interface AddressAttributes {
   userId: Types.ObjectId;
   /** Flat / house / building. */
   address1: string;
-  /** Area, landmark, street - genuinely optional. */
-  address2?: string;
+  /** Area, landmark, street - required, so the door is findable. */
+  address2: string;
   city: string;
   state: string;
   pincode: string;
@@ -22,7 +22,12 @@ export interface AddressAttributes {
   updatedAt: Date;
 }
 
-/** The shape returned by the API. */
+/**
+ * The shape returned by the API.
+ *
+ * `address2` is optional only for rows saved before it became required; a
+ * missing value is dropped by `JSON.stringify`, so it never reaches a client.
+ */
 export interface PublicAddress {
   id: string;
   address1: string;
@@ -41,7 +46,7 @@ const addressSchema = new Schema<AddressAttributes>(
   {
     userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     address1: { type: String, required: true, trim: true, maxlength: 120 },
-    address2: { type: String, trim: true, maxlength: 120 },
+    address2: { type: String, required: true, trim: true, maxlength: 120 },
     city: { type: String, required: true, trim: true, maxlength: 60 },
     state: { type: String, required: true, trim: true },
     pincode: { type: String, required: true, trim: true },
@@ -69,9 +74,7 @@ export function toPublicAddress(address: AddressDocument): PublicAddress {
   return {
     id: address.id,
     address1: address.address1,
-    // Left out entirely when empty, rather than sent as null, so the form and
-    // the formatted address agree on what "no second line" looks like.
-    ...(address.address2 ? { address2: address.address2 } : {}),
+    address2: address.address2,
     city: address.city,
     state: address.state,
     pincode: address.pincode,

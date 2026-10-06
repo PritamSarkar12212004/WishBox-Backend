@@ -200,15 +200,15 @@ describe('address book', () => {
     assert.equal(created.body.data?.address2, 'Wardha Road');
     assert.ok(created.body.data?.id);
 
-    const second = await addAddress(token, { ...VALID, address1: 'Plot 9, IT Park', address2: undefined });
+    const second = await addAddress(token, { ...VALID, address1: 'Plot 9, IT Park', address2: 'IT Park Road' });
     assert.equal(second.status, 201);
 
     const list = await request<Address[]>('GET', `${API}/addresses`, { token });
     assert.equal(list.body.data?.length, 2);
     // Newest first: the one just added is the one they are about to use.
     assert.equal(list.body.data?.[0].id, second.body.data?.id);
-    // An omitted second line is absent, not an empty string.
-    assert.equal('address2' in (list.body.data?.[0] ?? {}), false);
+    // Both lines come back - the second is required, not a nicety.
+    assert.equal(list.body.data?.[0].address2, 'IT Park Road');
 
     // The first address stored only the shopper's own fields.
     const stored = await AddressModel.findById(created.body.data?.id);
@@ -256,6 +256,22 @@ describe('address book', () => {
     assert.equal(missingLine.status, 422);
   });
 
+  it('requires both address lines', async () => {
+    const token = await signIn(SHOPPER);
+
+    const missingSecond = await addAddress(token, {
+      address1: 'Flat 4B, Shanti Residency',
+      city: 'Nagpur',
+      state: 'Maharashtra',
+      pincode: '440001',
+    });
+    assert.equal(missingSecond.status, 422);
+    assert.equal(missingSecond.body.error?.code, 'VALIDATION_ERROR');
+
+    const blankSecond = await addAddress(token, { ...VALID, address2: '   ' });
+    assert.equal(blankSecond.status, 422);
+  });
+
   it('rejects an unknown field rather than storing it', async () => {
     const token = await signIn(SHOPPER);
     const res = await addAddress(token, { ...VALID, landmark: 'Near the temple' });
@@ -263,7 +279,7 @@ describe('address book', () => {
     assert.equal(res.status, 422);
   });
 
-  it('edits an address, and clears the second line when it is blank', async () => {
+  it('edits an address, but never lets the second line go blank', async () => {
     await AddressModel.deleteMany({});
     const token = await signIn(SHOPPER);
     const created = await addAddress(token, VALID);
@@ -278,13 +294,21 @@ describe('address book', () => {
     assert.equal(edited.body.data?.pincode, '411001');
     // Untouched fields survive a partial edit.
     assert.equal(edited.body.data?.address1, VALID.address1);
+    assert.equal(edited.body.data?.address2, VALID.address2);
 
-    const cleared = await request<Address>('PATCH', `${API}/addresses/${id}`, {
+    // Required means required: a blank second line is refused, not cleared.
+    const cleared = await request('PATCH', `${API}/addresses/${id}`, {
       token,
       body: { address2: '' },
     });
-    assert.equal(cleared.status, 200);
-    assert.equal('address2' in (cleared.body.data ?? {}), false);
+    assert.equal(cleared.status, 422);
+
+    const moved = await request<Address>('PATCH', `${API}/addresses/${id}`, {
+      token,
+      body: { address2: 'Sitabuldi Main Road' },
+    });
+    assert.equal(moved.status, 200);
+    assert.equal(moved.body.data?.address2, 'Sitabuldi Main Road');
 
     const empty = await request('PATCH', `${API}/addresses/${id}`, { token, body: {} });
     assert.equal(empty.status, 422);

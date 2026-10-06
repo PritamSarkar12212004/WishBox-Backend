@@ -35,9 +35,6 @@ export async function createAddress(
   const address = await AddressModel.create({
     userId: new Types.ObjectId(userId),
     ...input,
-    // An empty second line is stored as absent, not as "", so there is one
-    // representation of "no second line" everywhere.
-    address2: input.address2 || undefined,
   });
 
   log.info({ userId, addressId: address.id }, 'Address saved');
@@ -55,14 +52,11 @@ export async function updateAddress(
   }
 
   if (input.address1 !== undefined) address.address1 = input.address1;
+  // Validation guarantees this is never blank, so it is a plain replace.
+  if (input.address2 !== undefined) address.address2 = input.address2;
   if (input.city !== undefined) address.city = input.city;
   if (input.state !== undefined) address.state = input.state;
   if (input.pincode !== undefined) address.pincode = input.pincode;
-
-  if (input.address2 !== undefined) {
-    if (input.address2) address.address2 = input.address2;
-    else address.set('address2', undefined);
-  }
 
   await address.save();
   log.info({ userId, addressId: address.id }, 'Address updated');
