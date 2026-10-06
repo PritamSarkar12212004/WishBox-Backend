@@ -9,6 +9,7 @@
     "start": "node dist/server.js",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.test.json",
     "db:check": "tsx scripts/check-db.ts",
+    "admin:seed": "tsx scripts/seed-admin.ts",
     "test": "node --import tsx --test tests/*.test.ts"
   },
   "keywords": [

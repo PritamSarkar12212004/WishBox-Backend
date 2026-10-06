@@ -57,6 +57,15 @@ const envSchema = z
     /** How many devices can stay logged in at once. */
     AUTH_MAX_SESSIONS: z.coerce.number().int().min(1).max(20).default(5),
 
+    // --- Admin panel --------------------------------------------------------
+    /**
+     * WhatsApp numbers that may open the admin panel. Comma-separated, with or
+     * without the +91 country code. Signing in with one of these promotes the
+     * account to the `admin` role, and every `/admin` route is gated on that
+     * role. Leaving it empty locks the panel for everybody.
+     */
+    ADMIN_PHONES: z.string().trim().default('7796419792'),
+
     // --- OTP ---------------------------------------------------------------
     OTP_TTL_SECONDS: z.coerce.number().int().min(60).max(3600).default(300),
     OTP_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(10).default(5),
@@ -140,12 +149,25 @@ export const corsOrigins: string[] = data.CORS_ORIGIN.split(',')
   .map((origin) => origin.trim())
   .filter((origin) => origin.length > 0);
 
+/**
+ * The admin allowlist, normalised to bare 10-digit numbers so it can be
+ * compared against `user.phone` directly. A country code is stripped and
+ * anything that is not a valid Indian mobile is dropped - a stray space or a
+ * typo can never accidentally grant admin access.
+ */
+export const adminPhones: string[] = data.ADMIN_PHONES.split(',')
+  .map((phone) => phone.replace(/\D/g, '').slice(-10))
+  .filter((phone) => /^[6-9]\d{9}$/.test(phone));
+
 export const env = Object.freeze({
   ...data,
   IS_PRODUCTION: data.NODE_ENV === 'production',
   IS_DEVELOPMENT: data.NODE_ENV === 'development',
   IS_TEST: data.NODE_ENV === 'test',
   corsOrigins,
+  adminPhones,
+  /** True when the admin panel is unlocked for at least one number. */
+  ADMIN_ENABLED: adminPhones.length > 0,
   /** Only ever expose OTP codes to clients outside production, on request. */
   EXPOSE_OTP_IN_RESPONSE: data.OTP_DEBUG_RETURN_CODE && data.NODE_ENV !== 'production',
 });

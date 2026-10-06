@@ -16,8 +16,9 @@ npm run dev            # http://localhost:5000
 | `npm run build`     | Compile TypeScript to `dist/`                  |
 | `npm start`         | Run the compiled server (`node dist/server.js`)|
 | `npm run typecheck` | Type-check without emitting                    |
-| `npm test`          | Test suite (HTTP layer, auth flow, gateway)    |
+| `npm test`          | Test suite (HTTP layer, auth flow, gateway, admin API) |
 | `npm run db:check`  | Diagnose the MongoDB connection layer by layer |
+| `npm run admin:seed`| Fill the admin panel's collections with a seeded year of history |
 
 ## Folder structure
 
@@ -101,6 +102,61 @@ header and in the response body, and included in every log line.
 | GET    | `/api/v1/auth/me`          | ✅ | Signed-in profile (alias of `/users/me`) |
 | GET    | `/api/v1/users/me`         | ✅ | Signed-in profile                        |
 | PATCH  | `/api/v1/users/me`         | ✅ | Update the display name                  |
+| GET    | `/api/v1/admin/session`    | 🛡️ | Admin identity + confirmation of access  |
+| GET    | `/api/v1/admin/dataset`    | 🛡️ | Everything the admin panel charts, in one call |
+| GET    | `/api/v1/admin/settings`   | 🛡️ | Store settings                           |
+| PATCH  | `/api/v1/admin/settings`   | 🛡️ | Merge a partial settings change          |
+| PATCH  | `/api/v1/admin/orders/:id` | 🛡️ | Approve, ship, cancel or refund an order |
+| PATCH  | `/api/v1/admin/returns/:id`| 🛡️ | Move a return through its queue          |
+| PATCH  | `/api/v1/admin/reviews/:id`| 🛡️ | Publish/unpublish a review, post or clear a reply |
+| DELETE | `/api/v1/admin/reviews/:id`| 🛡️ | Remove a review                          |
+
+✅ = `Authorization: Bearer <accessToken>` · 🛡️ = the same, **plus** admin access.
+
+## Admin panel API
+
+Who gets the panel is configuration, not data. Add the WhatsApp numbers to
+`ADMIN_PHONES` (comma separated, `+91` optional):
+
+```
+ADMIN_PHONES=7796419792,9811111111
+```
+
+Signing in with one of those numbers promotes the account to `role: "admin"` —
+before the tokens are minted, so the very first token is already stamped. It is
+re-checked on every authenticated request, so a number added to `.env` takes
+effect on that account's next request and cannot be self-granted through the API.
+An empty list locks the panel for everyone.
+
+`requireAdmin` (in `src/modules/admin/admin.access.ts`) gates every `/admin`
+route, reading the role from the database rather than from the token — a
+promotion applies immediately instead of at the next token refresh.
+
+```
+GET    /api/v1/admin/session            -> { user, isAdmin }
+GET    /api/v1/admin/dataset            -> { orders, customers, returns, reviews, coupons, restocks }
+PATCH  /api/v1/admin/orders/:id         { status, courier, trackingId, cancellationReason, refundScreenshot }
+PATCH  /api/v1/admin/returns/:id        { status }
+PATCH  /api/v1/admin/reviews/:id        { status, reply: { message } | null }
+DELETE /api/v1/admin/reviews/:id
+GET    /api/v1/admin/settings
+PATCH  /api/v1/admin/settings           { any subset of the settings }
+```
+
+**The server owns the audit trail.** `approvedAt`, `cancelledAt`, `refundedAt`
+and `approvedBy` are stamped by the API — a client that sends them gets a 422
+rather than a backdated approval. The service also refuses an impossible state:
+a courier on an unapproved order, a refund on an order that is not cancelled, a
+cancellation with no reason.
+
+**Where the data comes from.** Orders, customers, returns, reviews, coupons and
+restocks are ordinary MongoDB collections (`AdminOrder`, `AdminCustomer`, …)
+served exactly as any other record. There is no checkout yet, so a fresh database
+would leave every dashboard flat: `npm run admin:seed` fills them with a seeded
+year of history (fixed seed, so two runs agree). It clears those six collections
+first and never touches `users`, so accounts survive a reseed. The product
+catalogue is deliberately **not** here — it lives in the storefront's own store.
+
 
 ## Authentication
 

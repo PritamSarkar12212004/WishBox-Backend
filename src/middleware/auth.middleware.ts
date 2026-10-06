@@ -1,5 +1,6 @@
 import type { Request, RequestHandler } from 'express';
 import { UserModel, type UserDocument } from '../modules/user/user.model.js';
+import { ensureAdminRole } from '../modules/admin/admin.access.js';
 import { asyncHandler } from '../shared/asyncHandler.js';
 import { verifyAccessToken } from '../shared/tokens.js';
 import { ForbiddenError, UnauthorizedError } from '../shared/errors.js';
@@ -32,6 +33,11 @@ async function resolveUser(req: Request): Promise<UserDocument> {
   if (user.status === 'blocked') {
     throw new ForbiddenError('This account has been blocked');
   }
+
+  // An allowlisted number is an admin. Correcting it here (a no-op once the
+  // role matches) means adding a number to ADMIN_PHONES takes effect on that
+  // account's next request instead of only after a fresh sign-in.
+  await ensureAdminRole(user);
 
   return user;
 }

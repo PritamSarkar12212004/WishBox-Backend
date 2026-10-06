@@ -14,6 +14,7 @@ import {
   verifyRefreshToken,
 } from '../../shared/tokens.js';
 import { UserModel, toPublicUser, type PublicUser, type UserDocument } from '../user/user.model.js';
+import { ensureAdminRole } from '../admin/admin.access.js';
 import { OtpModel } from './otp.model.js';
 
 const log = createChildLogger('auth');
@@ -248,6 +249,11 @@ export async function verifyOtp(
   }
 
   const { user, isNewUser } = await findOrCreateUser(phone, name);
+
+  // Runs before the tokens are minted so an allowlisted number is handed a
+  // token that is already stamped `role: admin`.
+  await ensureAdminRole(user);
+
   const session = await issueSession(user, context);
 
   // Sent on *every* successful verify, for a returning shopper as well as a
