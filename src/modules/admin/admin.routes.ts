@@ -1,5 +1,8 @@
 import { Router } from 'express';
 import { requireAuth, validate } from '../../middleware/index.js';
+import { categoryAdminRouter } from '../categories/categories.routes.js';
+import { productAdminRouter } from '../products/products.routes.js';
+import { uploadAdminRouter } from '../uploads/uploads.routes.js';
 import { requireAdmin } from './admin.access.js';
 import {
   deleteReview,
@@ -50,3 +53,13 @@ adminRouter.patch(
   patchReview,
 );
 adminRouter.delete('/reviews/:id', validate({ params: adminIdParamSchema }), deleteReview);
+
+/**
+ * The catalogue and its media live in their own modules, but their write routes
+ * hang off this router on purpose: they need exactly this gate, and mounting
+ * them here is what makes "every write under /admin is admin-only" true by
+ * construction rather than by remembering to add a middleware.
+ */
+adminRouter.use('/products', productAdminRouter);
+adminRouter.use('/categories', categoryAdminRouter);
+adminRouter.use('/uploads', uploadAdminRouter);

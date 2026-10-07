@@ -28,9 +28,9 @@ src/
 ├── middleware/   request logging, error handling, rate limiting, auth guard
 ├── shared/       API response format, error classes, JWT helpers, axios client
 ├── routes/       route definitions (health + feature router mounting)
-├── modules/      one folder per feature (auth, user, …)
+├── modules/      one folder per feature (auth, user, addresses, products, categories, uploads, admin)
 ├── consts/       shared constants (HTTP statuses, error codes, phone rules)
-├── services/     external integrations (WhatsApp gateway, Shiprocket)
+├── services/     external integrations (WhatsApp gateway, Cloudinary, Shiprocket)
 ├── types/        ambient type augmentation (Express Request)
 ├── app.ts        Express app wiring
 └── server.ts     bootstrap + graceful shutdown
@@ -108,6 +108,21 @@ header and in the response body, and included in every log line.
 | POST   | `/api/v1/addresses`        | ✅ | Save a delivery address (201)            |
 | PATCH  | `/api/v1/addresses/:id`    | ✅ | Change one or more fields of an address  |
 | DELETE | `/api/v1/addresses/:id`    | ✅ | Remove an address                        |
+| GET    | `/api/v1/products`         | –  | Published products, with filters, sorting and paging |
+| GET    | `/api/v1/products/:slug`   | –  | One published product (`404` for a draft) |
+| GET    | `/api/v1/categories`       | –  | Categories with live product counts      |
+| GET    | `/api/v1/categories/:slug` | –  | One category                             |
+| POST   | `/api/v1/admin/products`   | 🛡️ | Create a product (201)                   |
+| GET    | `/api/v1/admin/products`   | 🛡️ | Every product, drafts included           |
+| GET    | `/api/v1/admin/products/:slug` | 🛡️ | One product, draft or published      |
+| PATCH  | `/api/v1/admin/products/:slug` | 🛡️ | Partial product edit                 |
+| DELETE | `/api/v1/admin/products/:slug` | 🛡️ | Delete a product, and its images     |
+| POST   | `/api/v1/admin/categories` | 🛡️ | Create a category (201)                  |
+| PATCH  | `/api/v1/admin/categories/:slug` | 🛡️ | Rename or re-order a category     |
+| DELETE | `/api/v1/admin/categories/:slug` | 🛡️ | Delete a category (`409` while in use) |
+| GET    | `/api/v1/admin/uploads/status` | 🛡️ | Whether the server can sign an upload |
+| POST   | `/api/v1/admin/uploads`    | 🛡️ | Signed upload / re-host a URL (201)      |
+| DELETE | `/api/v1/admin/uploads?publicId=…` | 🛡️ | Delete a stored asset           |
 | GET    | `/api/v1/admin/session`    | 🛡️ | Admin identity + confirmation of access  |
 | GET    | `/api/v1/admin/dataset`    | 🛡️ | Everything the admin panel charts, in one call |
 | GET    | `/api/v1/admin/settings`   | 🛡️ | Store settings                           |
@@ -163,10 +178,119 @@ scoped by the signed-in shopper's `userId`, so an id belonging to somebody else
 is a `404` indistinguishable from a missing one. A malformed id is a `422`, and
 a book is capped at **10 addresses** (`409` past that).
 
+## Product catalogue API
+
+Products are what a shopper sees, so the split is by audience rather than by
+verb: **reading is public** (`/products`, `/categories`) and **writing is admin
+only** (`/admin/products`, `/admin/categories`, `/admin/uploads`). A product's
+public id is its **slug**, `id` in every response, and the document mirrors the
+storefront's `CatalogProduct` field for field - so a product from the API drops
+straight into the existing cards and PDP.
+
+```bash
+# anyone can browse
+curl 'http://localhost:5000/api/v1/products?category=paper-craft&sort=price-asc&limit=12'
+
+# only an admin can add one
+curl -X POST http://localhost:5000/api/v1/admin/products \
+  -H "authorization: Bearer $ADMIN_ACCESS" -H 'content-type: application/json' \
+  -d '{
+        "name":"Premium Handmade Decorative Paper Sheets",
+        "sku":"WB-PAPER-001",
+        "brand":"PaperCraft",
+        "category":"paper-craft",
+        "price":249,
+        "mrp":399,
+        "badge":"BESTSELLER",
+        "stock":8,
+        "image":"https://res.cloudinary.com/dftt4ow6q/image/upload/v1789112613/wishbox/paper.jpg",
+        "description":"Hand-pressed decorative paper with a smooth matte finish.",
+        "highlights":["Premium handmade quality paper","Smooth, even matte texture"]
+      }'
+```
+
+The rules the API enforces:
+
+| Field | Rule |
+| ----- | ---- |
+| `name` | 2-140 chars; the `slug` is derived from it when one is not given |
+| `slug` | optional, `^[a-z0-9]+(-[a-z0-9]+)*$`, unique - renaming it retires the old URL |
+| `sku` | uppercase letters, numbers and hyphens, unique |
+| `category` | must be an **existing category slug** (`404` otherwise) |
+| `price` / `mrp` | whole rupees, ₹1+; `mrp` may never sit below `price` |
+| `image` / `hoverImage` / `gallery` / `beforeImage` / `afterImage` | a hosted `http(s)` URL or an image data URI; `hoverImage` falls back to `image` |
+| `rating` | 0-5 (`reviewCount` is an integer) |
+| `available` | in stock; drives the out-of-stock treatment |
+| `hidden` | unpublished: absent from the public listing, search **and** its own product page (`404` to a shopper, `200` to an admin) |
+| `highlights` | up to 12 strings |
+| `specs` | `height`, `width`, `gsm`, `packaging` (`Sealed` \| `Standard`) |
+| `offer` | `code` (normalised to uppercase) + `label` |
+
+On `PATCH`, an absent field is left alone and **`null` clears it** - that is how a
+badge, offer, specification block or extra image is removed. The MRP rule is
+re-checked against the *edited* product, so widening MRP and dropping the price
+are both allowed on their own, while ending up above the list price is a `422`
+that writes nothing. An unknown key in the body is a `422` rather than something
+quietly stored.
+
+Listing filters: `category`, `search` (name, brand or SKU - regex characters are
+treated as text), `badge`, `available`, `sort` (`featured`, `newest`, `price-asc`,
+`price-desc`, `name`), `page`, `limit` (max 60). Pagination is reported in `meta`:
+
+```jsonc
+{ "data": [ /* products */ ], "meta": { "total": 42, "page": 2, "limit": 12, "pages": 4 } }
+```
+
+`GET /api/v1/admin/products` adds `visibility=published|hidden|all` (default
+`published`); the public route does not accept it at all.
+
+Categories are their own small resource, with the slug as the id
+(`{"label":"Paper & Craft"}` becomes `paper-craft`). A category cannot be
+deleted while products still point at it - that is a `409` naming the count, so
+the shop can never render a product filed under a category that no longer
+exists.
+
 ## Image storage (Cloudinary)
 
-The product environment (cloud name) and API key are configured, and the secret
-is what authorises a **signed** upload:
+Two paths, deliberately different:
+
+- **Unsigned, from the browser** — the admin product editor posts straight to
+  Cloudinary with an unsigned upload preset (the storefront's `lib/cloudinary.ts`),
+  so no secret is ever in the bundle. This is how product photos are uploaded.
+- **Signed, from the server** — `src/services/cloudinary/` does the work a
+  browser cannot: re-hosting an existing URL, forcing a public id, and deleting
+  an asset when its record goes away. `POST /api/v1/admin/uploads` (admin only)
+  exposes that; `GET /api/v1/admin/uploads/status` says whether it can sign right
+  now, and which key is missing if it cannot.
+
+```
+src/services/cloudinary/
+├── config.ts            every setting, resolved once from validated env
+├── signature.ts         request signing (the API secret never leaves the server)
+├── client.ts            the HTTP calls, with timeout and retry
+├── urls.ts              delivery URL -> public id, so a record can be cleaned up
+├── cloudinary.errors.ts the two failures the service can throw
+├── types.ts             request/response shapes
+└── index.ts             the module's public surface
+```
+
+Uploading through `POST /admin/uploads` sends a *reference* to an image (a hosted
+URL Cloudinary fetches itself, or a data URI) rather than bytes, because the JSON
+body is capped at 1 MB. Larger files go up **unsigned** from the admin editor's
+drop zone, which never needs the secret.
+
+```ts
+import { destroyImage, isConfigured, storeImage } from './services/cloudinary/index.js';
+
+if (isConfigured()) {
+  const asset = await storeImage({ file: dataUriOrUrl, folder: 'refunds' });
+  // …save asset.secureUrl on the record
+}
+
+await destroyImage(asset.publicId);
+```
+
+Config, all declared in `src/config/env.ts` and surfaced as `env.cloudinary`:
 
 ```
 CLOUDINARY_CLOUD_NAME=dftt4ow6q
@@ -176,12 +300,29 @@ CLOUDINARY_API_SECRET=
 CLOUDINARY_FOLDER=wishbox
 ```
 
-They are parsed and validated in `src/config/env.ts` and exported as
-`cloudinary` / `env.cloudinary`. `cloudinary.enabled` is **false until all three
-credentials are present**, so a half-configured environment cannot produce a
-silently broken upload — a caller checks `enabled` first and skips storage
-entirely when it is false. Leaving `CLOUDINARY_API_SECRET` blank therefore keeps
-uploads off without breaking the rest of the API.
+`CLOUDINARY_API_SECRET` is the one credential that is **not** required to boot.
+`cloudinaryConfig.isConfigured` is false until the cloud name, key and secret are
+all present, so a half-configured environment refuses a signed operation with a
+**503 that names the missing key** rather than writing a broken URL. `storeImage()`
+throws that up front; callers that treat storage as optional check
+`isConfigured()` first. Because the admin editor uploads unsigned, the storefront
+keeps working with the secret blank - set it and signed uploads *and* automatic
+image cleanup switch on, with no code change.
+
+Failure handling mirrors the messaging gateway, because the caller can act on
+exactly one of the two: a **refusal** (4xx/5xx) is thrown immediately with
+Cloudinary's own message — "Upload preset not found" is the whole fix — while an
+**unreachable** host is retried once and then reported as a 502. A delete that
+answers `not found` is returned, not thrown: the asset is gone, which is what was
+asked for.
+
+**Product images are cleaned up for you.** Whenever a product is edited or
+deleted, any image URL that was on it before and is not on it afterwards is
+handed to `removeProductImages()`, which recovers the public id from the delivery
+URL and destroys it. Two rules make that safe to run mid-request: it never throws
+(the write is already persisted), and it only ever touches assets in *this* cloud
+— a pasted Unsplash link is simply not ours. With no API secret the whole step is
+a silent no-op, which is why the shop keeps working either way.
 
 ## Admin panel API
 
@@ -393,7 +534,7 @@ apiRouter.use('/wishlist', wishlistRouter);
 Gate it for signed-in shoppers with the auth middleware:
 
 ```ts
-import { requireAuth, requireRole } from '../../middleware/index.js';
+import { requireAuth, requireRole } from '../../middleware/index.js'; 
 
 router.get('/', requireAuth, listWishlist);
 router.delete('/admin/:id', requireAuth, requireRole('admin'), removeEntry);
@@ -401,6 +542,12 @@ router.delete('/admin/:id', requireAuth, requireRole('admin'), removeEntry);
 
 `optionalAuth` is available too, for public routes that show extra data once
 the shopper is signed in.
+
+Admin-only **writes** for a module do not add their own guard: the module exports
+a second router (`productAdminRouter`, `categoryAdminRouter`, `uploadAdminRouter`)
+that the admin router mounts inside its `requireAuth, requireAdmin` gate. That
+keeps "everything under `/admin` is admin-only" true by construction rather than
+by remembering a middleware — `products.routes.ts` is the reference.
 
 > Imports use explicit `.js` extensions because the project is ESM
 > (`"type": "module"` + `NodeNext` resolution).
