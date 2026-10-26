@@ -23,7 +23,7 @@ npm run dev              # http://localhost:5000
 | `npm run db:check`  | Diagnose the MongoDB connection layer by layer |
 | `npm run db:indexes`| Sync all model indexes — required once, because `autoIndex` is off in production |
 | `npm run catalog:seed` | Upsert the opening catalogue, categories and coupons (idempotent) |
-| `npm run admin:seed`| Fill a **development** database with a seeded year of history |
+| `npm run data:clean-demo` | Remove legacy demo history while preserving customer accounts and catalogue products |
 
 ## Production checklist
 
@@ -37,7 +37,7 @@ npm run dev              # http://localhost:5000
 6. `npm run db:indexes` once per database: `autoIndex` is off in production, so the
    unique slugs, coupon codes and lookup indexes have to be created deliberately.
 7. `npm run catalog:seed` once to open the shop (idempotent; never overwrites stock
-   or visibility an admin has changed). `admin:seed` is development-only.
+   or visibility an admin has changed).
 8. `npm run build && npm start`, and point the platform health check at
    `/api/v1/health` (200 ok, 503 when Mongo is down).
 
@@ -105,8 +105,8 @@ router.get('/widgets/:id', asyncHandler(async (req, res) => {
 validation/cast errors, duplicate-key errors (11000), malformed JSON and JWT
 errors. Internal details are hidden when `NODE_ENV=production`.
 
-**Rate limiting** – `globalRateLimiter` is applied to all routes.
-`authRateLimiter` is stricter and should be added to login/OTP routes.
+**Rate limiting** – customer and admin API routes have no global request cap.
+OTP request and verification endpoints keep a dedicated abuse-prevention limit.
 
 **Request ids** – every request gets an id, returned in the `x-request-id`
 header and in the response body, and included in every log line.
@@ -457,10 +457,8 @@ served exactly as any other record. Orders are no longer a demo-only dataset:
 `POST /api/v1/orders` writes the same `AdminOrder` document an admin then approves
 and ships, so a fresh database fills with real trading history.
 
-`npm run admin:seed` still exists for **development** — it fills a scratch database
-with a seeded year (fixed seed, so two runs agree), clearing those six collections
-first and leaving `users` alone. Do not run it against production. The product
-catalogue is the `products` collection, seeded once with `npm run catalog:seed`.
+The retired admin demo seeder is no longer available. The product catalogue is
+the `products` collection, seeded once with `npm run catalog:seed`.
 
 
 ## Authentication

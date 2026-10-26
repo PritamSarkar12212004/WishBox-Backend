@@ -306,22 +306,29 @@ describe('GET /admin/session', () => {
 describe('GET /admin/dataset', () => {
   it('serves every collection the panel charts', async () => {
     await seedFixtures();
+    await signIn(CUSTOMER_PHONE);
     const { token } = await signIn(ADMIN_PHONE);
     const res = await request('GET', `${API}/admin/dataset`, { token });
 
     assert.equal(res.status, 200);
     const data = res.body.data as Record<string, unknown[]>;
 
-    assert.equal(data.orders.length, 1);
+    assert.equal(data.orders.length, 0);
     assert.equal(data.customers.length, 1);
-    assert.equal(data.returns.length, 1);
-    assert.equal(data.reviews.length, 1);
+    assert.equal(data.registeredCustomers.length, 1);
+    assert.equal(data.returns.length, 0);
+    assert.equal(data.reviews.length, 0);
     assert.equal(data.coupons.length, 1);
-    assert.equal(data.restocks.length, 1);
+    assert.equal(data.restocks.length, 0);
     assert.equal(typeof (res.body.data as { generatedAt: number }).generatedAt, 'number');
   });
 
   it('returns the wire shape the panel is typed against', async () => {
+    await seedFixtures();
+    await signIn(CUSTOMER_PHONE);
+    const shopper = await UserModel.findOne({ phone: CUSTOMER_PHONE });
+    assert.ok(shopper);
+    await AdminOrderModel.updateOne({ orderId: ORDER_ID }, { $set: { customerId: shopper.id } });
     const { token } = await signIn(ADMIN_PHONE);
     const res = await request('GET', `${API}/admin/dataset`, { token });
     const order = (res.body.data as { orders: Record<string, unknown>[] }).orders[0];

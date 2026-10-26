@@ -7,18 +7,14 @@ import {
   type ReturnStatus,
 } from './admin.constants.js';
 import { AdminCouponModel, toPublicCoupon, type AdminCoupon } from './models/coupon.model.js';
-import {
-  AdminCustomerModel,
-  toPublicCustomer,
-  type AdminCustomer,
-} from './models/customer.model.js';
+import type { AdminCustomer } from './models/customer.model.js';
 import {
   AdminOrderModel,
   toPublicOrder,
   type AdminOrder,
   type AdminOrderAttributes,
 } from './models/order.model.js';
-import { AdminRestockModel, toPublicRestock, type AdminRestock } from './models/restock.model.js';
+import type { AdminRestock } from './models/restock.model.js';
 import {
   AdminReviewModel,
   toPublicReview,
@@ -46,6 +42,7 @@ import type {
 import { listAllSaves, type AdminWishlistEntry } from '../wishlist/wishlist.service.js';
 import { listAllCartInterest, type AdminCartInterest } from '../cart/cart.service.js';
 import { recalculateProductRating } from '../reviews/reviews.service.js';
+import { UserModel } from '../user/user.model.js';
 
 const log = createChildLogger('admin');
 
@@ -65,6 +62,7 @@ export interface AdminDataset {
   generatedAt: number;
   orders: AdminOrder[];
   customers: AdminCustomer[];
+  registeredCustomers: Array<{ id: string; name: string; phone: string; joinedAt: number }>;
   returns: AdminReturn[];
   reviews: AdminReviewView[];
   coupons: AdminCoupon[];
@@ -76,26 +74,51 @@ export interface AdminDataset {
 }
 
 export async function getDataset(): Promise<AdminDataset> {
-  const [orders, customers, returns, reviews, coupons, restocks, wishlist, cartInterest] =
+  const [registeredUsers, allOrders, allReturns, reviews, coupons, wishlist, cartInterest] =
     await Promise.all([
+      UserModel.find({ role: 'customer' }).select('_id name phone createdAt').sort({ createdAt: -1 }).lean(),
       AdminOrderModel.find().sort({ placedAt: -1 }).lean(),
-      AdminCustomerModel.find().sort({ joinedAt: -1 }).lean(),
       AdminReturnModel.find().sort({ requestedAt: -1 }).lean(),
-      AdminReviewModel.find().sort({ createdAt: -1 }).lean(),
+      // Shopper reviews have an account id; seed/demo rows do not.
+      AdminReviewModel.find({ userId: { $exists: true, $ne: '' } }).sort({ createdAt: -1 }).lean(),
       AdminCouponModel.find().sort({ code: 1 }).lean(),
-      AdminRestockModel.find().sort({ at: -1 }).lean(),
       listAllSaves(),
       listAllCartInterest(),
     ]);
 
+  const usersById = new Map(registeredUsers.map((user) => [String(user._id), user]));
+  const orders = allOrders.filter((order) => usersById.has(order.customerId));
+  const realOrderIds = new Set(orders.map((order) => order.orderId));
+  const orderCities = new Map<string, string>();
+  for (const order of [...orders].sort((a, b) => a.placedAt - b.placedAt)) {
+    orderCities.set(order.customerId, order.city);
+  }
+  const customers = registeredUsers.map((user) => ({
+    id: String(user._id),
+    name: user.name,
+    email: '',
+    phone: user.phone,
+    city: orderCities.get(String(user._id)) ?? '',
+    joinedAt: user.createdAt.getTime(),
+    isGuest: false,
+  }));
+  const returns = allReturns.filter((entry) => realOrderIds.has(entry.orderId));
+
   return {
     generatedAt: Date.now(),
     orders: orders.map(toPublicOrder),
-    customers: customers.map(toPublicCustomer),
+    customers,
+    registeredCustomers: registeredUsers.map((user) => ({
+      id: String(user._id),
+      name: user.name,
+      phone: user.phone,
+      joinedAt: user.createdAt.getTime(),
+    })),
     returns: returns.map(toPublicReturn),
     reviews: reviews.map(toPublicReview),
     coupons: coupons.map(toPublicCoupon),
-    restocks: restocks.map(toPublicRestock),
+    // The current app has no real restock event writer; don't show generated demo rows.
+    restocks: [],
     wishlist,
     cartInterest,
   };

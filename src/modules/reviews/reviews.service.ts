@@ -124,7 +124,11 @@ export async function listProductReviews(
 ): Promise<ProductReviewPage> {
   await assertPublishedProduct(slug);
 
-  const reviews = await AdminReviewModel.find({ productId: slug, status: 'Published' })
+  const reviews = await AdminReviewModel.find({
+    productId: slug,
+    status: 'Published',
+    userId: { $exists: true, $ne: '' },
+  })
     .sort({ createdAt: -1 })
     .limit(200)
     .lean<Array<AdminReviewAttributes & { _id?: unknown }>>();

@@ -6,7 +6,6 @@ import { env } from './config/env.js';
 import { logger } from './config/logger.js';
 import {
   errorHandler,
-  globalRateLimiter,
   notFoundHandler,
   requestLogger,
 } from './middleware/index.js';
@@ -60,9 +59,8 @@ export function createApp(): Express {
   app.use(express.json({ limit: '1mb' }));
   app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
-  // --- Observability & abuse protection -----------------------------------
+  // --- Observability ------------------------------------------------------
   app.use(requestLogger);
-  app.use(globalRateLimiter);
 
   // --- Routes -------------------------------------------------------------
   app.get('/', (_req, res) => {

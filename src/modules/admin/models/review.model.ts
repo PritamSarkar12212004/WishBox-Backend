@@ -32,7 +32,7 @@ export type AdminReviewAttributes = Omit<AdminReview, 'id'> & {
   /**
    * The shopper who wrote it. Present on reviews written in the storefront, so
    * one account has one review per product and the panel can tell a real
-   * customer review from a seeded row.
+   * customer review from a legacy demo row.
    */
   userId?: string;
   reply?: ReviewReply;

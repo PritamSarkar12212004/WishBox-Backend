@@ -79,20 +79,23 @@ export async function listAllSaves(): Promise<AdminWishlistEntry[]> {
   const productBySlug = new Map(products.map((product) => [product.slug, product]));
   const userById = new Map(users.map((user) => [String(user._id), user]));
 
-  return entries.map((entry) => {
+  return entries.flatMap((entry) => {
     const product = productBySlug.get(entry.productId);
     const user = userById.get(String(entry.userId));
+    // A saved item can outlive a product deletion. It is not useful interest
+    // data without a real catalogue item, so keep it out of the admin report.
+    if (!product) return [];
 
-    return {
+    return [{
       productId: entry.productId,
-      name: product?.name ?? entry.productId,
-      image: product?.image ?? '',
-      price: product?.price ?? 0,
-      available: product?.available ?? false,
-      hidden: product?.hidden ?? true,
+      name: product.name,
+      image: product.image,
+      price: product.price,
+      available: product.available,
+      hidden: product.hidden,
       customer: user?.name ?? 'Deleted account',
       phone: user?.phone ?? '',
       savedAt: entry.createdAt.getTime(),
-    };
+    }];
   });
 }

@@ -18,17 +18,7 @@ function rateLimitHandler(req: Request, res: Response): void {
   });
 }
 
-/** Broad limiter applied to every route. Disabled while running tests. */
-export const globalRateLimiter = rateLimit({
-  windowMs: env.RATE_LIMIT_WINDOW_MS,
-  limit: env.RATE_LIMIT_MAX,
-  standardHeaders: 'draft-8',
-  legacyHeaders: false,
-  skip: () => env.IS_TEST,
-  handler: rateLimitHandler,
-});
-
-/** Strict limiter for sensitive endpoints such as login, signup or OTP. */
+/** Rate limit only sensitive OTP endpoints; normal customer/admin APIs are uncapped. */
 export const authRateLimiter = rateLimit({
   windowMs: 15 * MINUTE,
   limit: env.IS_TEST ? 10_000 : 10,

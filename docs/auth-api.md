@@ -461,12 +461,12 @@ every session. After a single-device logout:
 
 | Scope                | Limit                                  | Applies to                |
 | -------------------- | -------------------------------------- | ------------------------- |
-| Global               | `RATE_LIMIT_MAX` (100) per `RATE_LIMIT_WINDOW_MS` (15 min) | every route |
+| Customer/admin APIs  | No application-level request cap       | All non-auth API routes   |
 | Sensitive auth       | 10 **failed** requests per 15 min      | `/auth/otp/request`, `/auth/otp/verify` |
 
 Successful OTP calls are not counted against the auth limiter, so a normal login
-never trips it. Exceeding either returns `429 TOO_MANY_REQUESTS` with
-`"Too many requests, please try again later."` Both limiters are disabled under
+never trips it. Exceeding the auth limit returns `429 TOO_MANY_REQUESTS` with
+`"Too many requests, please try again later."` The auth limiter is disabled under
 `NODE_ENV=test`.
 
 ---

@@ -79,23 +79,25 @@ export async function listAllCartInterest(): Promise<AdminCartInterest[]> {
   const productBySlug = new Map(products.map((product) => [product.slug, product]));
   const userById = new Map(users.map((user) => [String(user._id), user]));
 
-  return entries.map((entry) => {
+  return entries.flatMap((entry) => {
     const product = productBySlug.get(entry.productId);
     const user = userById.get(String(entry.userId));
+    // Cart-interest rows for deleted products are stale, not current demand.
+    if (!product) return [];
 
-    return {
+    return [{
       productId: entry.productId,
-      name: product?.name ?? entry.productId,
-      image: product?.image ?? '',
-      price: product?.price ?? 0,
-      available: product?.available ?? false,
-      hidden: product?.hidden ?? true,
+      name: product.name,
+      image: product.image,
+      price: product.price,
+      available: product.available,
+      hidden: product.hidden,
       customer: user?.name ?? 'Deleted account',
       phone: user?.phone ?? '',
       adds: entry.adds,
       units: entry.units,
       firstAt: entry.firstAt.getTime(),
       lastAt: entry.lastAt.getTime(),
-    };
+    }];
   });
 }
