@@ -25,6 +25,7 @@ import { AdminReviewModel } from '../src/modules/admin/models/review.model.js';
 import { AdminSettingModel } from '../src/modules/admin/models/setting.model.js';
 import { OtpModel } from '../src/modules/auth/otp.model.js';
 import { CategoryModel } from '../src/modules/categories/categories.model.js';
+import { AdditionalCatalogueFileModel } from '../src/modules/categories/categories.additional-file.model.js';
 import { SiteContentModel } from '../src/modules/content/content.model.js';
 import { CounterModel } from '../src/modules/orders/orders.model.js';
 import { ProductModel } from '../src/modules/products/products.model.js';
@@ -42,6 +43,7 @@ const MODELS = [
   AdminReviewModel,
   AdminSettingModel,
   CategoryModel,
+  AdditionalCatalogueFileModel,
   CounterModel,
   OtpModel,
   ProductModel,

@@ -156,6 +156,33 @@ describe('signed uploads against a faked Cloudinary', () => {
     assert.equal(JSON.stringify(status.body).includes('test-api-secret'), false);
   });
 
+  it('signs direct browser uploads for each allowed media type without exposing the secret', async () => {
+    const token = await signIn(ADMIN_PHONE, 'Admin');
+    const result = await request<{
+      cloudName: string;
+      resourceType: string;
+      folder: string;
+      timestamp: number;
+      api_key: string;
+      signature: string;
+      maxUploadBytes: number;
+    }>('GET', `${API}/admin/uploads/signature?resourceType=video&folder=products`, { token });
+
+    assert.equal(result.status, 200);
+    assert.equal(result.body.data?.cloudName, 'dftt4ow6q');
+    assert.equal(result.body.data?.resourceType, 'video');
+    assert.equal(result.body.data?.folder, 'wishbox/products');
+    assert.equal(result.body.data?.api_key, 'test-api-key');
+    assert.equal(
+      result.body.data?.signature,
+      expectedSignature({ folder: 'wishbox/products', timestamp: result.body.data!.timestamp }, 'test-api-secret'),
+    );
+    assert.equal(JSON.stringify(result.body).includes('test-api-secret'), false);
+
+    const invalid = await request('GET', `${API}/admin/uploads/signature?resourceType=video&folder=private`, { token });
+    assert.equal(invalid.status, 422);
+  });
+
   it('uploads a re-hosted URL with a valid signature', async () => {
     mock.reset();
     mock.onPost(process.env.SMS_API_URL!).reply(() => [200, { message: 'queued' }]);

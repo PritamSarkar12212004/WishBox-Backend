@@ -6,10 +6,9 @@ import { Schema, model, type HydratedDocument, type Model } from 'mongoose';
  * It sits in its own collection rather than inside the category document, for
  * two reasons:
  *
- *  - **Delivery is ours.** Cloudinary refuses to serve a raw file whose id ends
- *    in `.pdf` unless the account enables PDF/ZIP delivery, which is off by
- *    default - so an uploaded catalogue used to answer 401. Stored here, the API
- *    serves it with the right content type and a real filename.
+ *  - **Legacy fallback.** Older catalogues were stored here while Cloudinary
+ *    raw-file delivery was being configured. New uploads go to Cloudinary; the
+ *    migration removes a legacy blob after its Cloudinary URL is saved.
  *  - **The category stays small.** A 650 KB blob in every category read would
  *    bloat the shop's filter row.
  *

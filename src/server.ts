@@ -4,6 +4,7 @@ import { env } from './config/env.js';
 import { connectDatabase, disconnectDatabase } from './config/database.js';
 import { createChildLogger } from './config/logger.js';
 import { SERVICE_NAME } from './consts/constants.js';
+import { startNewBadgeExpiryJob } from './modules/products/newBadgeExpiry.js';
 
 const log = createChildLogger('server');
 
@@ -35,6 +36,7 @@ async function bootstrap(): Promise<void> {
   log.info({ env: env.NODE_ENV, node: process.version }, `Starting ${SERVICE_NAME}...`);
 
   await connectDatabase();
+  startNewBadgeExpiryJob();
 
   httpServer = await startHttpServer();
   log.info(`Health check available at http://localhost:${env.PORT}/health`);

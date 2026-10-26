@@ -54,6 +54,38 @@ export const setCategoryCatalogue = asyncHandler(async (req, res) => {
   sendSuccess(res, category, { message: `Catalogue saved for ${category.label}` });
 });
 
+/** POST /admin/categories/:slug/catalogues - append an independently downloadable file. */
+export const addCategoryCatalogue = asyncHandler(async (req, res) => {
+  const category = await categoryService.addCatalogue(
+    slugOf(req),
+    req.body as CategoryCatalogueInput,
+    req.user?.name,
+  );
+  sendSuccess(res, category, { statusCode: HTTP_STATUS.CREATED, message: 'Catalogue added' });
+});
+
+/** GET /categories/:slug/catalogues/:catalogueId/file */
+export const downloadAdditionalCategoryCatalogue = asyncHandler(async (req, res) => {
+  const file = await categoryService.getAdditionalCatalogueFile(
+    slugOf(req),
+    String(req.params.catalogueId),
+  );
+  res.setHeader('Content-Type', file.contentType);
+  res.setHeader('Content-Disposition', `attachment; filename="${file.fileName}"`);
+  res.setHeader('Content-Length', String(file.bytes.length));
+  res.setHeader('Cache-Control', 'public, max-age=600');
+  res.send(file.bytes);
+});
+
+/** DELETE /admin/categories/:slug/catalogues/:catalogueId */
+export const removeAdditionalCategoryCatalogue = asyncHandler(async (req, res) => {
+  const category = await categoryService.removeAdditionalCatalogue(
+    slugOf(req),
+    String(req.params.catalogueId),
+  );
+  sendSuccess(res, category, { message: 'Catalogue removed' });
+});
+
 /**
  * GET /categories/:slug/catalogue/file - the uploaded PDF/Word document itself.
  *

@@ -17,6 +17,7 @@ import { Schema, model, type HydratedDocument, type Model } from 'mongoose';
 
 export const PRODUCT_BADGES = ['SALE', 'BESTSELLER', 'NEW'] as const;
 export type ProductBadge = (typeof PRODUCT_BADGES)[number];
+export const NEW_BADGE_LIFETIME_MS = 7 * 24 * 60 * 60 * 1000;
 
 /** Packaging options the admin editor offers. */
 export const PRODUCT_PACKAGING = ['Sealed', 'Standard'] as const;
@@ -69,6 +70,8 @@ export interface ProductAttributes {
   /** List price; never below `price`. */
   mrp: number;
   badge?: ProductBadge;
+  /** When a product was tagged NEW; stored internally, never sent to clients. */
+  badgeAddedAt?: Date;
   available: boolean;
   hidden: boolean;
   stock: number;
@@ -163,6 +166,7 @@ const productSchema = new Schema<ProductAttributes>(
     price: { type: Number, required: true, min: 1 },
     mrp: { type: Number, required: true, min: 1 },
     badge: { type: String, enum: PRODUCT_BADGES },
+    badgeAddedAt: { type: Date },
     available: { type: Boolean, default: true },
     hidden: { type: Boolean, default: false },
     stock: { type: Number, default: 0, min: 0 },
@@ -223,6 +227,11 @@ export function toPublicProduct(product: ProductDocument): PublicProduct {
     maxQty: tier.maxQty ?? null,
     unitPrice: tier.unitPrice,
   }));
+  const badgeStart = product.badgeAddedAt ?? product.createdAt;
+  const badge = product.badge === 'NEW' &&
+    Date.now() - badgeStart.getTime() >= NEW_BADGE_LIFETIME_MS
+    ? undefined
+    : product.badge;
 
   return {
     id: product.slug,
@@ -234,7 +243,7 @@ export function toPublicProduct(product: ProductDocument): PublicProduct {
     reviewCount: product.reviewCount,
     price: product.price,
     mrp: product.mrp,
-    ...(product.badge ? { badge: product.badge } : {}),
+    ...(badge ? { badge } : {}),
     available: product.available,
     hidden: product.hidden,
     stock: product.stock,

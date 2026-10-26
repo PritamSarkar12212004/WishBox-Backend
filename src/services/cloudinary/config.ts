@@ -37,8 +37,8 @@ export const cloudinaryConfig = Object.freeze({
   /** Default destination folder for every upload. */
   folder: optional(env.CLOUDINARY_FOLDER) ?? 'wishbox',
 
-  /** Signed uploads can carry a real file, so the cap is generous. */
-  maxUploadBytes: 10 * 1024 * 1024,
+  /** Direct signed browser uploads support large videos without proxying bytes through the API. */
+  maxUploadBytes: 50 * 1024 * 1024,
 
   /**
    * The provider is reachable and fast, but a signed upload is user-visible -

@@ -42,6 +42,11 @@ export function productImageUrls(product: Partial<ImageFields>): string[] {
   ].filter((url): url is string => typeof url === 'string' && url.trim().length > 0);
 }
 
+/** Images and videos attached to a product, including its video gallery item. */
+export function productMediaUrls(product: Partial<ImageFields & { videoUrl?: string }>): string[] {
+  return [...productImageUrls(product), ...(product.videoUrl ? [product.videoUrl] : [])];
+}
+
 /** The public ids among a set of URLs, deduplicated, order preserved. */
 export function storedPublicIds(urls: string[]): string[] {
   const seen = new Set<string>();
@@ -63,7 +68,15 @@ export function replacedImageUrls(before: string[], after: string[]): string[] {
  * Returns the public ids that were actually removed, for logs and tests.
  */
 export async function removeProductImages(urls: string[]): Promise<string[]> {
-  const publicIds = storedPublicIds(urls);
+  const assets = new Map<string, 'image' | 'video' | 'raw'>();
+  for (const url of urls) {
+    const publicId = publicIdFromDeliveryUrl(url);
+    if (!publicId) continue;
+    const resource = new URL(url).pathname.split('/').filter(Boolean)[1];
+    const resourceType = resource === 'video' || resource === 'raw' ? resource : 'image';
+    assets.set(`${resourceType}:${publicId}`, resourceType);
+  }
+  const publicIds = [...assets.keys()];
   if (publicIds.length === 0) return [];
 
   if (!isConfigured()) {
@@ -74,10 +87,11 @@ export async function removeProductImages(urls: string[]): Promise<string[]> {
   }
 
   const removed: string[] = [];
-  for (const publicId of publicIds) {
+  for (const key of publicIds) {
+    const [resourceType, publicId] = key.split(':', 2) as [ 'image' | 'video' | 'raw', string ];
     try {
-      await destroyImage(publicId);
-      removed.push(publicId);
+      await destroyImage(publicId, resourceType);
+      removed.push(key);
     } catch (error) {
       log.warn(
         { publicId, reason: error instanceof Error ? error.message : String(error) },

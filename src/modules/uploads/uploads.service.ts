@@ -4,10 +4,12 @@ import {
   destroyImage,
   isConfigured,
   missingCredentials,
+  requireCredentials,
   storeImage,
 } from '../../services/cloudinary/index.js';
+import { signedPayload } from '../../services/cloudinary/signature.js';
 import type { CloudinaryResourceType } from '../../services/cloudinary/index.js';
-import type { UploadImageInput } from './uploads.validation.js';
+import type { UploadImageInput, UploadSignatureQueryInput } from './uploads.validation.js';
 
 const log = createChildLogger('uploads');
 
@@ -58,9 +60,26 @@ export function uploadStatus(): {
   };
 }
 
+/** Signs a browser-to-Cloudinary upload; the API secret never leaves the server. */
+export function uploadSignature(input: UploadSignatureQueryInput) {
+  const { apiKey, apiSecret } = requireCredentials();
+  const folder = `${cloudinaryConfig.folder}/${input.folder}`;
+  const params = {
+    folder,
+    timestamp: Math.floor(Date.now() / 1000),
+  };
+  return {
+    cloudName: cloudinaryConfig.cloudName,
+    resourceType: input.resourceType,
+    maxUploadBytes: cloudinaryConfig.maxUploadBytes,
+    ...signedPayload(apiSecret, apiKey, params),
+  };
+}
+
 export async function storeUpload(input: UploadImageInput): Promise<StoredImage> {
   const asset = await storeImage({
     file: input.file,
+    ...(input.resourceType ? { resourceType: input.resourceType } : {}),
     ...(input.folder ? { folder: input.folder } : {}),
     ...(input.publicId ? { publicId: input.publicId } : {}),
     ...(input.tags ? { tags: input.tags } : {}),

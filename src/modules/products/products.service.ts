@@ -4,7 +4,7 @@ import { ConflictError, NotFoundError, ValidationError } from '../../shared/erro
 import { slugify } from '../../shared/slug.js';
 import { assertCategoryExists } from '../categories/categories.service.js';
 import {
-  productImageUrls,
+  productMediaUrls,
   removeProductImages,
   replacedImageUrls,
 } from './products.media.js';
@@ -171,6 +171,7 @@ export async function createProduct(input: CreateProductInput): Promise<PublicPr
     price: input.price,
     mrp: input.mrp,
     ...(input.badge ? { badge: input.badge } : {}),
+    ...(input.badge === 'NEW' ? { badgeAddedAt: new Date() } : {}),
     available: input.available,
     hidden: input.hidden,
     stock: input.stock,
@@ -209,7 +210,7 @@ export async function updateProduct(
     throw new NotFoundError('That product was not found');
   }
 
-  const previousImages = productImageUrls(product);
+  const previousImages = productMediaUrls(product);
 
   if (input.category !== undefined) {
     await assertCategoryExists(input.category);
@@ -242,7 +243,12 @@ export async function updateProduct(
   if (input.gallery !== undefined) product.gallery = input.gallery;
 
   // `null` clears; `undefined` (absent) leaves the field alone.
-  if (input.badge !== undefined) product.badge = input.badge ?? undefined;
+  if (input.badge !== undefined) {
+    product.badge = input.badge ?? undefined;
+    product.badgeAddedAt = input.badge === 'NEW'
+      ? (product.badge === 'NEW' && product.badgeAddedAt ? product.badgeAddedAt : new Date())
+      : undefined;
+  }
   if (input.beforeImage !== undefined) product.beforeImage = input.beforeImage ?? undefined;
   if (input.afterImage !== undefined) product.afterImage = input.afterImage ?? undefined;
   if (input.videoUrl !== undefined) product.videoUrl = input.videoUrl || undefined;
@@ -268,7 +274,7 @@ export async function updateProduct(
 
   // Only now: the change is in the database, so an orphaned asset is the worst
   // that can happen if Cloudinary is unreachable.
-  const orphans = replacedImageUrls(previousImages, productImageUrls(product));
+  const orphans = replacedImageUrls(previousImages, productMediaUrls(product));
   if (orphans.length > 0) await removeProductImages(orphans);
 
   log.info({ slug: product.slug }, 'Product updated');
@@ -283,7 +289,7 @@ export async function deleteProduct(slug: string): Promise<void> {
 
   await product.deleteOne();
   // The record is gone, so its photos should not be paying rent either.
-  await removeProductImages(productImageUrls(product));
+  await removeProductImages(productMediaUrls(product));
 
   log.info({ slug }, 'Product removed');
 }

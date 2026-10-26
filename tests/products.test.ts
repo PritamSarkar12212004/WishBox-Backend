@@ -41,6 +41,7 @@ const { createHttpMock } = await import('./helpers/http-mock.js');
 const { OtpModel } = await import('../src/modules/auth/otp.model.js');
 const { ProductModel } = await import('../src/modules/products/products.model.js');
 const { CategoryModel } = await import('../src/modules/categories/categories.model.js');
+const { expireNewBadges } = await import('../src/modules/products/newBadgeExpiry.js');
 
 const mock = createHttpMock(httpClient);
 mock.onPost(process.env.SMS_API_URL!).reply(() => [200, { message: 'queued' }]);
@@ -135,7 +136,13 @@ type Product = {
   createdAt: string;
 };
 
-type Category = { id: string; label: string; sortOrder: number; productCount?: number };
+type Category = {
+  id: string;
+  label: string;
+  sortOrder: number;
+  productCount?: number;
+  catalogues?: Array<{ id: string; title: string; url: string }>;
+};
 
 const IMAGE = 'https://res.cloudinary.com/dftt4ow6q/image/upload/v1789112613/wishbox/paper.jpg';
 const HOVER = 'https://res.cloudinary.com/dftt4ow6q/image/upload/v1789112613/wishbox/paper-2.jpg';
@@ -183,6 +190,33 @@ before(async () => {
 });
 
 describe('categories', () => {
+  it('stores multiple independent Cloudinary catalogues and removes only the selected file', async () => {
+    await seedCategories();
+    const firstUrl = 'https://res.cloudinary.com/dftt4ow6q/raw/upload/v123456/wishbox/catalogues/spring.pdf';
+    const secondUrl = 'https://res.cloudinary.com/dftt4ow6q/raw/upload/v123456/wishbox/catalogues/gift-guide.pdf';
+    const first = await request<Category>('POST', `${API}/admin/categories/paper-craft/catalogues`, {
+      token: admin,
+      body: { title: 'Spring list', description: 'Spring collection', file: firstUrl },
+    });
+    const second = await request<Category>('POST', `${API}/admin/categories/paper-craft/catalogues`, {
+      token: admin,
+      body: { title: 'Gift guide', description: '', file: secondUrl },
+    });
+    assert.equal(first.status, 201);
+    assert.equal(second.status, 201);
+    assert.equal(second.body.data?.catalogues?.length, 2);
+
+    const firstId = first.body.data!.catalogues![0]!.id;
+    assert.equal(first.body.data!.catalogues![0]!.url, firstUrl);
+
+    const removed = await request<Category>('DELETE', `${API}/admin/categories/paper-craft/catalogues/${firstId}`, {
+      token: admin,
+    });
+    assert.equal(removed.status, 200);
+    assert.deepEqual(removed.body.data?.catalogues?.map((catalogue) => catalogue.title), ['Gift guide']);
+    assert.equal(removed.body.data?.catalogues?.[0]?.url, secondUrl);
+  });
+
   it('are readable by anyone, with live product counts', async () => {
     await ProductModel.deleteMany({});
     await seedCategories();
@@ -362,6 +396,24 @@ describe('creating a product', () => {
 });
 
 describe('reading the catalogue', () => {
+  it('expires NEW badges seven days after they are applied', async () => {
+    await ProductModel.deleteMany({});
+    await seedCategories();
+    const product = await seedProduct({ badge: 'NEW' });
+    const taggedAt = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000);
+    await ProductModel.updateOne({ slug: product.id }, { $set: { badgeAddedAt: taggedAt } });
+
+    const publicProduct = await request<Product>('GET', `${API}/products/${product.id}`);
+    assert.equal(publicProduct.status, 200);
+    assert.equal(publicProduct.body.data?.badge, undefined);
+
+    const expired = await expireNewBadges(new Date());
+    assert.equal(expired, 1);
+    const savedProduct = await ProductModel.findOne({ slug: product.id });
+    assert.equal(savedProduct?.badge, undefined);
+    assert.equal(savedProduct?.badgeAddedAt, undefined);
+  });
+
   it('is public, and never shows a draft', async () => {
     await ProductModel.deleteMany({});
     await seedCategories();

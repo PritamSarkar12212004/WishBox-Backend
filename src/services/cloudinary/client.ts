@@ -95,8 +95,13 @@ export async function uploadImage(input: UploadImageInput): Promise<CloudinaryUp
   if (tags) params.tags = tags;
 
   const payload = { file, ...signedPayload(apiSecret, apiKey, params) };
-  // `raw` keeps a PDF's bytes and extension intact; `image` runs image processing.
-  const url = resourceUrl('upload', input.resourceType === 'raw' ? 'raw' : 'image');
+  // `raw` keeps document bytes; video stays in the video delivery path.
+  const url = resourceUrl(
+    'upload',
+    input.resourceType === 'raw' || input.resourceType === 'video'
+      ? input.resourceType
+      : 'image',
+  );
 
   let lastError: unknown = null;
 

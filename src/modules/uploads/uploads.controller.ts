@@ -2,11 +2,17 @@ import { asyncHandler } from '../../shared/asyncHandler.js';
 import { sendSuccess } from '../../shared/apiResponse.js';
 import { HTTP_STATUS } from '../../consts/constants.js';
 import * as uploadService from './uploads.service.js';
-import type { DeleteUploadQueryInput, UploadImageInput } from './uploads.validation.js';
+import type { DeleteUploadQueryInput, UploadImageInput, UploadSignatureQueryInput } from './uploads.validation.js';
 
 /** GET /uploads/status - can the server sign an upload right now? */
 export const getUploadStatus = asyncHandler(async (_req, res) => {
   sendSuccess(res, uploadService.uploadStatus(), { message: 'Upload status' });
+});
+
+/** GET /uploads/signature?resourceType=image&folder=products */
+export const getUploadSignature = asyncHandler(async (req, res) => {
+  const signature = uploadService.uploadSignature(req.validatedQuery as UploadSignatureQueryInput);
+  sendSuccess(res, signature, { message: 'Upload signature' });
 });
 
 /**

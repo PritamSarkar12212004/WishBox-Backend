@@ -2,16 +2,20 @@ import { Router } from 'express';
 import { validate } from '../../middleware/index.js';
 import {
   createCategory,
+  addCategoryCatalogue,
   deleteCategory,
   downloadCategoryCatalogue,
+  downloadAdditionalCategoryCatalogue,
   getCategory,
   listCategories,
   removeCategoryCatalogue,
+  removeAdditionalCategoryCatalogue,
   setCategoryCatalogue,
   updateCategory,
 } from './categories.controller.js';
 import {
   categoryCatalogueSchema,
+  additionalCatalogueParamSchema,
   categorySlugParamSchema,
   createCategorySchema,
   updateCategorySchema,
@@ -28,6 +32,11 @@ export const categoriesRouter = Router();
 categoriesRouter.get('/', listCategories);
 /* The uploaded catalogue document. Public: the storefront downloads it. */
 categoriesRouter.get(
+  '/:slug/catalogues/:catalogueId/file',
+  validate({ params: additionalCatalogueParamSchema }),
+  downloadAdditionalCategoryCatalogue,
+);
+categoriesRouter.get(
   '/:slug/catalogue/file',
   validate({ params: categorySlugParamSchema }),
   downloadCategoryCatalogue,
@@ -41,6 +50,16 @@ categoryAdminRouter.patch(
   '/:slug',
   validate({ params: categorySlugParamSchema, body: updateCategorySchema }),
   updateCategory,
+);
+categoryAdminRouter.post(
+  '/:slug/catalogues',
+  validate({ params: categorySlugParamSchema, body: categoryCatalogueSchema }),
+  addCategoryCatalogue,
+);
+categoryAdminRouter.delete(
+  '/:slug/catalogues/:catalogueId',
+  validate({ params: additionalCatalogueParamSchema }),
+  removeAdditionalCategoryCatalogue,
 );
 /* The official catalogue: a title, a short description and the PDF itself. */
 categoryAdminRouter.put(

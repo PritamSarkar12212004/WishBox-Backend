@@ -398,7 +398,7 @@ describe('PATCH /admin/orders/:id', () => {
   it('only accepts a refund screenshot on a cancelled order, then closes the refund', async () => {
     await seedFixtures();
     const { token } = await signIn(ADMIN_PHONE);
-    const screenshot = 'data:image/png;base64,AAAA';
+    const screenshot = 'https://res.cloudinary.com/dftt4ow6q/image/upload/v1/wishbox/orders/refund-proof.png';
 
     const tooEarly = await patch(orderUrl(ORDER_ID), token, { refundScreenshot: screenshot });
     assert.equal(tooEarly.status, 400);

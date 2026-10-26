@@ -16,7 +16,7 @@ export interface UploadImageInput {
    * Cloudinary stores the two in different delivery paths, so the choice has
    * to travel with the upload rather than be inferred from the file.
    */
-  resourceType?: 'image' | 'raw';
+  resourceType?: 'image' | 'video' | 'raw';
   /** Defaults to `CLOUDINARY_FOLDER` (`wishbox`). */
   folder?: string;
   /** Force a stable public id instead of a random one. */

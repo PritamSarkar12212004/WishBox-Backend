@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { cloudinaryConfig } from '../../services/cloudinary/config.js';
 import {
   ADMIN_ORDER_STATUSES,
   CANCELLATION_REASONS,
@@ -7,12 +8,8 @@ import {
   REVIEW_STATUSES,
 } from './admin.constants.js';
 
-/**
- * Ceiling for an inline image. The panel caps uploads at 300 KB, which becomes
- * roughly 410k characters once base64 encoded, so this leaves room for the
- * "data:image/png;base64," prefix without accepting an unbounded body.
- */
-const INLINE_IMAGE_MAX = 600_000;
+const isCloudinaryImage = (value: string) =>
+  value.startsWith(`https://res.cloudinary.com/${cloudinaryConfig.cloudName}/image/upload/`);
 
 export const adminIdParamSchema = z.object({
   id: z.string().trim().min(1, 'An id is required').max(64),
@@ -31,8 +28,8 @@ export const orderPatchSchema = z
     trackingId: z.string().trim().min(1).max(60).optional(),
     cancellationReason: z.enum(CANCELLATION_REASONS).optional(),
     refundStatus: z.enum(REFUND_STATUSES).optional(),
-    /** Proof of the refund that was processed - a data URL or a hosted URL. */
-    refundScreenshot: z.string().trim().min(1).max(INLINE_IMAGE_MAX).optional(),
+    /** Proof of the refund, uploaded to Cloudinary before saving the order. */
+    refundScreenshot: z.string().trim().max(4096).refine(isCloudinaryImage, 'Upload the screenshot to Cloudinary first').optional(),
   })
   .refine((value) => Object.keys(value).length > 0, {
     message: 'Provide at least one field to change',
@@ -65,7 +62,7 @@ export const settingsPatchSchema = z
     codEnabled: z.boolean().optional(),
     defaultCourier: z.string().trim().min(1).max(60).optional(),
     websiteTheme: z.string().trim().min(1).max(40).optional(),
-    paymentQr: z.string().trim().max(INLINE_IMAGE_MAX).optional(),
+    paymentQr: z.string().trim().max(4096).refine((value) => !value || isCloudinaryImage(value), 'Upload the QR image to Cloudinary first').optional(),
     paymentQrUpdatedAt: z.coerce.number().int().min(0).optional(),
   })
   .refine((value) => Object.keys(value).length > 0, {

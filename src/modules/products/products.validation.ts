@@ -1,14 +1,15 @@
 import { z } from 'zod';
 import { SLUG_REGEX } from '../../shared/slug.js';
+import { cloudinaryConfig } from '../../services/cloudinary/config.js';
 import { PRODUCT_BADGES, PRODUCT_PACKAGING } from './products.model.js';
 
 /**
  * Product rules.
  *
  * The prices are whole rupees, `mrp` may never sit below `price`, and every image
- * must be something a browser can actually load - a hosted URL (which is what
- * Cloudinary returns) or a data URI (the editor's local fallback). Anything else
- * would render as a broken card with no clue why.
+ * must be an image or video delivery URL from this store's Cloudinary account.
+ * Uploading happens before a product record is saved, so no media bytes or
+ * third-party URLs are stored in product documents.
  *
  * Bodies are strict: a typo'd field is a 422 instead of being silently dropped.
  * Query strings are not, because browsers and analytics append their own.
@@ -37,15 +38,16 @@ const brand = z.string().trim().min(1, 'Add the brand').max(60, 'Keep the brand 
 /** Whole rupees: the storefront never renders paise. */
 const rupees = z.coerce.number().int('Use whole rupees').min(1, 'The price must be at least ₹1').max(10_000_000);
 
+const cloudinaryAsset = (resourceType: 'image' | 'video') => (value: string) =>
+  Boolean(cloudinaryConfig.cloudName) &&
+  value.startsWith(`https://res.cloudinary.com/${cloudinaryConfig.cloudName}/${resourceType}/upload/`);
+
 const imageUrl = z
   .string()
   .trim()
   .min(1, 'An image URL is required')
   .max(4096, 'That URL is too long')
-  .refine(
-    (value) => /^https?:\/\//i.test(value) || /^data:image\//i.test(value),
-    'Use a hosted https URL or an image data URI',
-  );
+  .refine(cloudinaryAsset('image'), 'Upload the image to WishBox Cloudinary first');
 
 const optionalUrl = z.union([imageUrl, z.null()]);
 
@@ -120,7 +122,7 @@ export const createProductSchema = z
     beforeImage: imageUrl.optional(),
     afterImage: imageUrl.optional(),
     gallery: gallery.default([]),
-    videoUrl: z.string().trim().url('Use a full https URL for the video').max(2048).optional(),
+    videoUrl: z.string().trim().max(4096).refine(cloudinaryAsset('video'), 'Upload the video to WishBox Cloudinary first').optional(),
     description: z
       .string()
       .trim()
@@ -163,7 +165,7 @@ export const updateProductSchema = z
     beforeImage: optionalUrl.optional(),
     afterImage: optionalUrl.optional(),
     gallery: gallery.optional(),
-    videoUrl: z.union([z.string().trim().url(), z.literal(''), z.null()]).optional(),
+    videoUrl: z.union([z.string().trim().max(4096).refine(cloudinaryAsset('video'), 'Upload the video to WishBox Cloudinary first'), z.literal(''), z.null()]).optional(),
     description: z.string().trim().min(10).max(2000).optional(),
     highlights: highlights.optional(),
     specs: z.union([specs, z.null()]).optional(),

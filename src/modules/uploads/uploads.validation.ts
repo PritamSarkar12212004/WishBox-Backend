@@ -26,6 +26,13 @@ export const uploadImageSchema = z.strictObject({
   folder: z.string().trim().max(80).optional(),
   publicId: z.string().trim().max(160).optional(),
   tags: z.array(z.string().trim().min(1).max(40)).max(10).optional(),
+  resourceType: z.enum(['image', 'video', 'raw']).optional(),
+});
+
+/** Scope a browser-signed upload to a known type and an application folder. */
+export const uploadSignatureQuerySchema = z.object({
+  resourceType: z.enum(['image', 'video', 'raw']),
+  folder: z.enum(['products', 'catalogues', 'orders', 'settings']),
 });
 
 export const deleteUploadQuerySchema = z.object({
@@ -37,4 +44,5 @@ export const deleteUploadQuerySchema = z.object({
 });
 
 export type UploadImageInput = z.infer<typeof uploadImageSchema>;
+export type UploadSignatureQueryInput = z.infer<typeof uploadSignatureQuerySchema>;
 export type DeleteUploadQueryInput = z.infer<typeof deleteUploadQuerySchema>;

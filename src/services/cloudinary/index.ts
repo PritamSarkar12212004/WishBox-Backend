@@ -17,10 +17,9 @@
  * (`cloudinaryConfig.isConfigured`), so a half-configured environment never
  * writes a broken URL - it throws a 503 naming the missing key instead.
  *
- * The admin storefront currently uploads product images *unsigned* from the
- * browser (no secret in the bundle). This service is for the server-side work
- * that cannot be done there: signed uploads, re-hosting an existing URL, and
- * deleting assets when their record goes away.
+ * The admin storefront requests a short-lived upload signature here, then sends
+ * media bytes directly to Cloudinary. This service also re-hosts existing URLs
+ * and removes assets when their record goes away.
  */
 import { isConfigured } from './config.js';
 import { uploadImage } from './client.js';

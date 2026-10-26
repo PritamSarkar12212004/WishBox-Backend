@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { PAYMENT_METHODS, RETURN_REASONS } from '../admin/admin.constants.js';
 import { createAddressSchema } from '../addresses/addresses.validation.js';
 import { SLUG_REGEX } from '../../shared/slug.js';
+import { cloudinaryConfig } from '../../services/cloudinary/config.js';
 
 /**
  * What a shopper is allowed to send when placing an order.
@@ -47,10 +48,10 @@ export const createOrderSchema = z
     paymentScreenshot: z
       .string()
       .trim()
-      .max(2_000_000)
+      .max(4096)
       .refine(
-        (value) => /^https?:\/\//i.test(value) || /^data:image\//i.test(value),
-        'Attach a hosted URL or an image',
+        (value) => value.startsWith(`https://res.cloudinary.com/${cloudinaryConfig.cloudName}/image/upload/`),
+        'Upload the payment screenshot to Cloudinary first',
       )
       .optional(),
   })

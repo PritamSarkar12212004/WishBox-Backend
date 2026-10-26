@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { cloudinaryConfig } from '../../services/cloudinary/config.js';
 import { SLUG_REGEX } from '../../shared/slug.js';
 
 /**
@@ -42,9 +43,8 @@ export const updateCategorySchema = z
 /**
  * The official catalogue an admin uploads for a category.
  *
- * `file` is a reference, not multipart: either a PDF data URI that fits the
- * JSON body limit, or an https link to one already hosted. Cloudinary stores
- * the bytes, so the category record only ever holds the URL.
+ * `file` must be the result of a signed Cloudinary raw upload. The API only
+ * stores its delivery URL alongside the catalogue metadata.
  */
 export const categoryCatalogueSchema = z.strictObject({
   title: z
@@ -58,22 +58,17 @@ export const categoryCatalogueSchema = z.strictObject({
     .max(240, 'Keep the description under 240 characters')
     .default(''),
   /**
-   * A base64 `data:` URI for a PDF or Word document, or an https link to one
-   * already hosted. The bytes are decoded and checked in the service, which is
-   * where the size limit and the file's magic bytes are enforced.
+   * A base64 `data:` URI for a PDF or Word document. The bytes are decoded and
+   * checked in the service, which enforces the size limit and magic bytes.
    */
   file: z
     .string()
     .trim()
-    .min(1, 'Choose a document or paste a link to one')
-    .max(900_000, 'That file is too large - keep it under about 650 KB')
+    .url('Upload a PDF or Word document to Cloudinary first')
+    .max(2_048)
     .refine(
-      (value) =>
-        /^https?:\/\//i.test(value) ||
-        /^data:application\/(pdf|msword|vnd\.openxmlformats-officedocument\.wordprocessingml\.document)/i.test(
-          value,
-        ),
-      'Send a PDF/Word file or a hosted https link',
+      (value) => Boolean(cloudinaryConfig.cloudName) && value.startsWith(`https://res.cloudinary.com/${cloudinaryConfig.cloudName}/raw/upload/`),
+      'The catalogue must be uploaded to Cloudinary',
     ),
 });
 
@@ -87,6 +82,10 @@ export const categorySlugParamSchema = z.object({
     .trim()
     .toLowerCase()
     .regex(SLUG_REGEX, 'That category id is not valid'),
+});
+
+export const additionalCatalogueParamSchema = categorySlugParamSchema.extend({
+  catalogueId: z.string().uuid('That catalogue id is not valid'),
 });
 
 export type CategoryCatalogueInput = z.infer<typeof categoryCatalogueSchema>;

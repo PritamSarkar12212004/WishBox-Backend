@@ -1,8 +1,10 @@
 import { createChildLogger } from '../../config/logger.js';
+import { randomUUID } from 'node:crypto';
 import { destroyImage } from '../../services/cloudinary/index.js';
+import { publicIdFromDeliveryUrl } from '../../services/cloudinary/urls.js';
 import { ConflictError, NotFoundError } from '../../shared/errors.js';
 import { CategoryCatalogueFileModel } from './categories.file.model.js';
-import { decodeCatalogueFile } from './categories.file.js';
+import { AdditionalCatalogueFileModel } from './categories.additional-file.model.js';
 import { slugify } from '../../shared/slug.js';
 import { ProductModel } from '../products/products.model.js';
 import { CategoryModel, toPublicCategory, type PublicCategory } from './categories.model.js';
@@ -98,11 +100,8 @@ export async function updateCategory(
 /**
  * Attaches (or replaces) the official catalogue for a category.
  *
- * A data URI is stored in Cloudinary as a `raw` asset, because a PDF's bytes
- * have to survive untouched and a category document is the wrong place for a
- * file, so the bytes go in `CategoryCatalogueFileModel` and the category keeps
- * only a link to this API's own download route. A pasted https link is kept as
- * it is - the file is already hosted somewhere the admin controls.
+ * The file has already been uploaded to Cloudinary; MongoDB stores only the
+ * delivery URL and catalogue metadata.
  *
  * Replacing one deletes what it replaced, but only after the record has been
  * saved: a cleanup failure must never take the new catalogue down with it.
@@ -117,39 +116,10 @@ export async function setCatalogue(
     throw new NotFoundError('That category was not found');
   }
 
-  const file = input.file.trim();
-  const hostedElsewhere = /^https?:\/\//i.test(file);
-  const replacedPublicId = category.catalogue?.publicId;
-
-  let url: string;
-  let fileName: string | undefined;
-
-  if (hostedElsewhere) {
-    url = file;
-    // The file this API used to serve is no longer the catalogue.
-    await CategoryCatalogueFileModel.deleteOne({ slug });
-  } else {
-    const decoded = decodeCatalogueFile(file, slug);
-    await CategoryCatalogueFileModel.findOneAndUpdate(
-      { slug },
-      {
-        $set: {
-          slug,
-          fileName: decoded.fileName,
-          contentType: decoded.contentType,
-          bytes: decoded.bytes,
-          size: decoded.bytes.length,
-          updatedAt: new Date(),
-        },
-        $setOnInsert: { createdAt: new Date() },
-      },
-      { upsert: true, setDefaultsOnInsert: true },
-    );
-    fileName = decoded.fileName;
-    /* A path, not an absolute URL: the storefront resolves it against its own
-     * API base, so the same record works on localhost and in production. */
-    url = `/categories/${slug}/catalogue/file`;
-  }
+  const url = input.file.trim();
+  const replacedPublicId = category.catalogue?.publicId ??
+    (category.catalogue?.url ? publicIdFromDeliveryUrl(category.catalogue.url) : null);
+  const fileName = decodeURIComponent(url.split('/').pop()?.split('?')[0] ?? 'catalogue.pdf');
 
   category.catalogue = {
     title: input.title,
@@ -160,6 +130,7 @@ export async function setCatalogue(
     ...(actor ? { uploadedBy: actor } : {}),
   };
   await category.save();
+  await CategoryCatalogueFileModel.deleteOne({ slug });
 
   // Catalogs uploaded by the previous version lived in Cloudinary. Remove that
   // asset now that nothing points at it.
@@ -176,14 +147,15 @@ export async function setCatalogue(
   return getCategory(slug);
 }
 
-/** Detaches the catalogue, and the file this API stored for it. */
+/** Detaches the catalogue and removes its Cloudinary asset when it belongs to this cloud. */
 export async function removeCatalogue(slug: string): Promise<PublicCategory> {
   const category = await CategoryModel.findOne({ slug });
   if (!category) {
     throw new NotFoundError('That category was not found');
   }
 
-  const publicId = category.catalogue?.publicId;
+  const publicId = category.catalogue?.publicId ??
+    (category.catalogue?.url ? publicIdFromDeliveryUrl(category.catalogue.url) : null);
   category.catalogue = undefined;
   await category.save();
 
@@ -208,7 +180,10 @@ export async function getCatalogueFile(slug: string): Promise<{
   contentType: string;
   bytes: Buffer;
 }> {
-  const file = await CategoryCatalogueFileModel.findOne({ slug }).lean();
+  /* Deliberately not `.lean()`: a lean read hands back the raw BSON Binary,
+   * and `Buffer.from(binary)` is empty - the download arrived with 0 bytes.
+   * A hydrated document casts the field to a real Buffer. */
+  const file = await CategoryCatalogueFileModel.findOne({ slug });
   if (!file) {
     throw new NotFoundError('That category has no uploaded catalogue');
   }
@@ -220,7 +195,72 @@ export async function getCatalogueFile(slug: string): Promise<{
   };
 }
 
+/** Adds an independently downloadable catalogue to a category. */
+export async function addCatalogue(
+  slug: string,
+  input: CategoryCatalogueInput,
+  actor?: string,
+): Promise<PublicCategory> {
+  const category = await CategoryModel.findOne({ slug });
+  if (!category) throw new NotFoundError('That category was not found');
+
+  const id = randomUUID();
+  const url = input.file.trim();
+  const fileName = decodeURIComponent(url.split('/').pop()?.split('?')[0] ?? `${slugify(input.title)}.pdf`);
+  category.additionalCatalogues ??= [];
+  category.additionalCatalogues.push({
+    id,
+    title: input.title,
+    description: input.description,
+    url,
+    fileName,
+    uploadedAt: new Date(),
+    ...(actor ? { uploadedBy: actor } : {}),
+  });
+  await category.save();
+  log.info({ slug, catalogueId: id, actor }, 'Additional category catalogue saved');
+  return getCategory(slug);
+}
+
+/** Serves one independently uploaded category catalogue. */
+export async function getAdditionalCatalogueFile(slug: string, catalogueId: string) {
+  const file = await AdditionalCatalogueFileModel.findOne({ slug, catalogueId });
+  if (!file) throw new NotFoundError('That category catalogue was not found');
+  return {
+    fileName: file.fileName,
+    contentType: file.contentType,
+    bytes: Buffer.from(file.bytes),
+  };
+}
+
+/** Removes a single extra catalogue without affecting the others. */
+export async function removeAdditionalCatalogue(
+  slug: string,
+  catalogueId: string,
+): Promise<PublicCategory> {
+  const category = await CategoryModel.findOne({ slug });
+  if (!category) throw new NotFoundError('That category was not found');
+  const catalogue = category.additionalCatalogues?.find((entry) => entry.id === catalogueId);
+  const before = category.additionalCatalogues?.length ?? 0;
+  category.additionalCatalogues = (category.additionalCatalogues ?? []).filter(
+    (catalogue) => catalogue.id !== catalogueId,
+  );
+  if (category.additionalCatalogues.length === before) {
+    throw new NotFoundError('That category catalogue was not found');
+  }
+  await category.save();
+  await AdditionalCatalogueFileModel.deleteOne({ slug, catalogueId });
+  const publicId = catalogue?.url ? publicIdFromDeliveryUrl(catalogue.url) : null;
+  if (publicId) await destroyImage(publicId, 'raw').catch((error: unknown) => {
+    log.warn({ slug, catalogueId, reason: error instanceof Error ? error.message : 'unknown' }, 'Could not delete removed catalogue from Cloudinary');
+  });
+  log.info({ slug, catalogueId }, 'Additional category catalogue removed');
+  return getCategory(slug);
+}
+
 export async function deleteCategory(slug: string): Promise<void> {
+  const category = await CategoryModel.findOne({ slug });
+  if (!category) throw new NotFoundError('That category was not found');
   const products = await ProductModel.countDocuments({ category: slug });
   if (products > 0) {
     // Deleting it would leave products pointing at a category the shop cannot
@@ -233,6 +273,21 @@ export async function deleteCategory(slug: string): Promise<void> {
   const removed = await CategoryModel.deleteOne({ slug });
   if (removed.deletedCount === 0) {
     throw new NotFoundError('That category was not found');
+  }
+
+  await Promise.all([
+    CategoryCatalogueFileModel.deleteOne({ slug }),
+    AdditionalCatalogueFileModel.deleteMany({ slug }),
+  ]);
+  const cloudinaryIds = [category.catalogue?.url, ...(category.additionalCatalogues ?? []).map((item) => item.url)]
+    .filter((url): url is string => Boolean(url))
+    .map((url) => publicIdFromDeliveryUrl(url))
+    .filter((id): id is string => Boolean(id));
+  if (category.catalogue?.publicId) cloudinaryIds.push(category.catalogue.publicId);
+  for (const publicId of new Set(cloudinaryIds)) {
+    await destroyImage(publicId, 'raw').catch((error: unknown) => {
+      log.warn({ slug, reason: error instanceof Error ? error.message : 'unknown' }, 'Could not delete legacy category catalogue asset');
+    });
   }
 
   log.info({ slug }, 'Category removed');

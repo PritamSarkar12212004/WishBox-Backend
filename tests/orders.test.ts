@@ -22,7 +22,7 @@ process.env.SMS_API_TOKEN = 'test-gateway-token';
 process.env.SMS_API_VARIABLES_KEY = 'otpdev';
 process.env.SMS_SIGNUP_TEMPLATE_ID = 'signup-template-id';
 process.env.ADMIN_PHONES = '7796419792';
-process.env.CLOUDINARY_CLOUD_NAME = '';
+process.env.CLOUDINARY_CLOUD_NAME = 'dftt4ow6q';
 process.env.CLOUDINARY_API_KEY = '';
 process.env.CLOUDINARY_API_SECRET = '';
 
