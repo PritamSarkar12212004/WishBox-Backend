@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import { requireAuth, validate } from '../../middleware/index.js';
 import { categoryAdminRouter } from '../categories/categories.routes.js';
+import { getContent, patchContent } from '../content/content.controller.js';
+import { contentPatchSchema } from '../content/content.validation.js';
 import { productAdminRouter } from '../products/products.routes.js';
 import { uploadAdminRouter } from '../uploads/uploads.routes.js';
 import { requireAdmin } from './admin.access.js';
@@ -33,6 +35,9 @@ adminRouter.use(requireAuth, requireAdmin);
 
 adminRouter.get('/session', getSession);
 adminRouter.get('/dataset', getDataset);
+
+adminRouter.get('/content', getContent);
+adminRouter.patch('/content', validate({ body: contentPatchSchema }), patchContent);
 
 adminRouter.get('/settings', getSettings);
 adminRouter.patch('/settings', validate({ body: settingsPatchSchema }), patchSettings);

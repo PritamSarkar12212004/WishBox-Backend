@@ -6,8 +6,11 @@ Express 5 + TypeScript + MongoDB API for Wishbox.
 
 ```bash
 npm install
-cp .env.example .env   # then set MONGODB_URI
-npm run dev            # http://localhost:5000
+cp .env.example .env     # then set MONGODB_URI and the secrets
+npm run db:check         # confirm the database is reachable
+npm run db:indexes       # create/update every model's indexes (run once per database)
+npm run catalog:seed     # one-time: opening products, categories and coupons
+npm run dev              # http://localhost:5000
 ```
 
 | Script              | What it does                                   |
@@ -18,7 +21,25 @@ npm run dev            # http://localhost:5000
 | `npm run typecheck` | Type-check without emitting                    |
 | `npm test`          | Test suite (HTTP layer, auth flow, gateway, admin API) |
 | `npm run db:check`  | Diagnose the MongoDB connection layer by layer |
-| `npm run admin:seed`| Fill the admin panel's collections with a seeded year of history |
+| `npm run db:indexes`| Sync all model indexes — required once, because `autoIndex` is off in production |
+| `npm run catalog:seed` | Upsert the opening catalogue, categories and coupons (idempotent) |
+| `npm run admin:seed`| Fill a **development** database with a seeded year of history |
+
+## Production checklist
+
+1. `NODE_ENV=production`, and a `MONGODB_URI` (plus `MONGODB_DB` if the URI has no
+   database) pointing at the production cluster.
+2. Long random `JWT_SECRET` and `JWT_REFRESH_SECRET` (32+ chars), and
+   `OTP_DEBUG_RETURN_CODE=false` — boot refuses the combination that leaks codes.
+3. `CORS_ORIGIN` set to the deployed storefront origin(s), not `*`.
+4. `ADMIN_PHONES` filled with the real admin numbers — an empty list locks the panel.
+5. `SMS_API_TOKEN` (login codes) and the Cloudinary trio (product images).
+6. `npm run db:indexes` once per database: `autoIndex` is off in production, so the
+   unique slugs, coupon codes and lookup indexes have to be created deliberately.
+7. `npm run catalog:seed` once to open the shop (idempotent; never overwrites stock
+   or visibility an admin has changed). `admin:seed` is development-only.
+8. `npm run build && npm start`, and point the platform health check at
+   `/api/v1/health` (200 ok, 503 when Mongo is down).
 
 ## Folder structure
 
@@ -28,7 +49,8 @@ src/
 ├── middleware/   request logging, error handling, rate limiting, auth guard
 ├── shared/       API response format, error classes, JWT helpers, axios client
 ├── routes/       route definitions (health + feature router mounting)
-├── modules/      one folder per feature (auth, user, addresses, products, categories, uploads, admin)
+├── modules/      one folder per feature (auth, user, addresses, products, categories,
+│                 orders, coupons, content, uploads, admin)
 ├── consts/       shared constants (HTTP statuses, error codes, phone rules)
 ├── services/     external integrations (WhatsApp gateway, Cloudinary, Shiprocket)
 ├── types/        ambient type augmentation (Express Request)
@@ -44,6 +66,8 @@ Every auth endpoint with real captured request/response examples and copy-paste
 ## Conventions
 
 **Environment** – every variable is validated by zod in `config/env.ts`.
+`MONGODB_DB` (default `wishbox`) is used when `MONGODB_URI` names no database, so an
+Atlas string without a path never falls back to the driver's `test` database.
 The process exits immediately with a readable list of problems if anything is
 missing or malformed, so `env` is always safe to use. Add new variables to
 both `env.ts` and `.env.example`.
@@ -112,6 +136,13 @@ header and in the response body, and included in every log line.
 | GET    | `/api/v1/products/:slug`   | –  | One published product (`404` for a draft) |
 | GET    | `/api/v1/categories`       | –  | Categories with live product counts      |
 | GET    | `/api/v1/categories/:slug` | –  | One category                             |
+| GET    | `/api/v1/coupons`          | –  | The coupon codes currently usable         |
+| GET    | `/api/v1/content`          | –  | Website content: alert bar, footer, contact page |
+| POST   | `/api/v1/orders`           | ✅ | Place an order (server-priced, stock-checked) |
+| GET    | `/api/v1/orders`           | ✅ | The shopper's own orders, newest first   |
+| GET    | `/api/v1/orders/:id`       | ✅ | One of the shopper's orders              |
+| POST   | `/api/v1/orders/:id/returns` | ✅ | Raise a return on a delivered order    |
+| GET    | `/api/v1/returns`          | ✅ | The shopper's own return requests        |
 | POST   | `/api/v1/admin/products`   | 🛡️ | Create a product (201)                   |
 | GET    | `/api/v1/admin/products`   | 🛡️ | Every product, drafts included           |
 | GET    | `/api/v1/admin/products/:slug` | 🛡️ | One product, draft or published      |
@@ -125,6 +156,8 @@ header and in the response body, and included in every log line.
 | DELETE | `/api/v1/admin/uploads?publicId=…` | 🛡️ | Delete a stored asset           |
 | GET    | `/api/v1/admin/session`    | 🛡️ | Admin identity + confirmation of access  |
 | GET    | `/api/v1/admin/dataset`    | 🛡️ | Everything the admin panel charts, in one call |
+| GET    | `/api/v1/admin/content`    | 🛡️ | Website content (same object as `/content`) |
+| PATCH  | `/api/v1/admin/content`    | 🛡️ | Save or reset a website content section  |
 | GET    | `/api/v1/admin/settings`   | 🛡️ | Store settings                           |
 | PATCH  | `/api/v1/admin/settings`   | 🛡️ | Merge a partial settings change          |
 | PATCH  | `/api/v1/admin/orders/:id` | 🛡️ | Approve, ship, cancel or refund an order |
@@ -183,9 +216,15 @@ a book is capped at **10 addresses** (`409` past that).
 Products are what a shopper sees, so the split is by audience rather than by
 verb: **reading is public** (`/products`, `/categories`) and **writing is admin
 only** (`/admin/products`, `/admin/categories`, `/admin/uploads`). A product's
-public id is its **slug**, `id` in every response, and the document mirrors the
-storefront's `CatalogProduct` field for field - so a product from the API drops
-straight into the existing cards and PDP.
+public id is its **slug**, `id` in every response, and the document is the
+storefront's product shape field for field - so a product from the API drops
+straight into the cards and PDP. It is also the only copy: the storefront fetches
+this collection and keeps no catalogue of its own.
+
+Quantity breaks (`bulkTiers`: `minQty`, `maxQty`, `unitPrice`) live on the product
+because the order service prices a basket from them. A break can only ever lower
+the price, and a price edit that would leave a break above the list price is a
+`422` that writes nothing.
 
 ```bash
 # anyone can browse
@@ -249,6 +288,53 @@ Categories are their own small resource, with the slug as the id
 deleted while products still point at it - that is a `409` naming the count, so
 the shop can never render a product filed under a category that no longer
 exists.
+
+## Checkout and orders
+
+The shopper's order and the admin's order are **one document**. `POST /orders`
+writes into the same `adminorders` collection `GET /admin/dataset` serves, so an
+approval, shipment or cancellation is immediately what the shopper sees on
+`/history` -- there is no second copy and nothing to synchronise.
+
+```bash
+# checkout: quantities and an address, never prices
+curl -X POST http://localhost:5000/api/v1/orders \
+  -H "authorization: Bearer $ACCESS" -H 'content-type: application/json' \
+  -d '{
+        "items": [{"productId": "premium-handmade-decorative-paper", "qty": 12}],
+        "addressId": "64b7f9c2f1a2b3c4d5e6f7a8",
+        "payment": "COD",
+        "couponCode": "PAPER10"
+      }'
+
+# history, newest first
+curl http://localhost:5000/api/v1/orders -H "authorization: Bearer $ACCESS"
+
+# a return request on a delivered order
+curl -X POST "http://localhost:5000/api/v1/orders/%23WB-1001/returns" \
+  -H "authorization: Bearer $ACCESS" -H 'content-type: application/json' \
+  -d '{"reason":"Damaged in transit","note":"Packaging was crushed"}'
+```
+
+What the API decides, and why:
+
+| Rule | Where it lives |
+| ---- | -------------- |
+| Unit price, including quantity breaks | recomputed from the product record (`products.pricing.ts`) |
+| Coupon validity, expiry and minimum basket | the `admincoupons` collection, re-read at checkout |
+| Stock | decremented atomically (`stock >= qty` is part of the filter), rolled back if a later line loses the race |
+| Order number | a database counter, so two checkouts cannot share one |
+| Totals | computed server-side; a price in the request body is impossible (the body is strict) |
+| Ownership | every read is scoped by `customerId`; someone else's order id is a `404` |
+
+The address is either a saved one (`addressId`, which must belong to the shopper)
+or a full inline address validated by the address book's own rules. Payment is
+offline for now (`COD` etc.), so a new order starts as `Approval` with
+`paymentStatus: Pending` -- the admin's approve/refund flow is unchanged.
+
+A line that sells out becomes `available: false` in the same request, and a first
+time buyer is added to the panel's customer list, so the dashboard is populated by
+real orders rather than a fixture.
 
 ## Image storage (Cloudinary)
 
@@ -350,6 +436,8 @@ PATCH  /api/v1/admin/orders/:id         { status, courier, trackingId, cancellat
 PATCH  /api/v1/admin/returns/:id        { status }
 PATCH  /api/v1/admin/reviews/:id        { status, reply: { message } | null }
 DELETE /api/v1/admin/reviews/:id
+GET    /api/v1/admin/content
+PATCH  /api/v1/admin/content            { alert?, footer?, contact?, reset?: ['alert'|'footer'|'contact'] }
 GET    /api/v1/admin/settings
 PATCH  /api/v1/admin/settings           { any subset of the settings }
 ```
@@ -362,11 +450,14 @@ cancellation with no reason.
 
 **Where the data comes from.** Orders, customers, returns, reviews, coupons and
 restocks are ordinary MongoDB collections (`AdminOrder`, `AdminCustomer`, …)
-served exactly as any other record. There is no checkout yet, so a fresh database
-would leave every dashboard flat: `npm run admin:seed` fills them with a seeded
-year of history (fixed seed, so two runs agree). It clears those six collections
-first and never touches `users`, so accounts survive a reseed. The product
-catalogue is deliberately **not** here — it lives in the storefront's own store.
+served exactly as any other record. Orders are no longer a demo-only dataset:
+`POST /api/v1/orders` writes the same `AdminOrder` document an admin then approves
+and ships, so a fresh database fills with real trading history.
+
+`npm run admin:seed` still exists for **development** — it fills a scratch database
+with a seeded year (fixed seed, so two runs agree), clearing those six collections
+first and leaving `users` alone. Do not run it against production. The product
+catalogue is the `products` collection, seeded once with `npm run catalog:seed`.
 
 
 ## Authentication

@@ -75,6 +75,28 @@ const offer = z.strictObject({
 
 const rating = z.coerce.number().min(0, 'A rating is between 0 and 5').max(5, 'A rating is between 0 and 5');
 
+/**
+ * Quantity breaks. They are part of the product because the order service
+ * prices a basket from them - the storefront only mirrors the result.
+ */
+const bulkTier = z.strictObject({
+  minQty: z.coerce.number().int().min(1).max(100_000),
+  maxQty: z.coerce.number().int().min(1).max(100_000).nullable(),
+  unitPrice: rupees,
+});
+
+const bulkTiers = z
+  .array(bulkTier)
+  .max(10, 'Keep it to ten quantity breaks')
+  .refine(
+    (tiers) => tiers.every((tier, index) => index === 0 || tier.minQty > tiers[index - 1]!.minQty),
+    'List the quantity breaks from the smallest minimum to the largest',
+  )
+  .refine(
+    (tiers) => tiers.every((tier) => tier.maxQty === null || tier.maxQty >= tier.minQty),
+    'A break cannot end before it starts',
+  );
+
 export const createProductSchema = z
   .strictObject({
     name,
@@ -107,6 +129,7 @@ export const createProductSchema = z
     highlights: highlights.default([]),
     specs: specs.optional(),
     offer: offer.optional(),
+    bulkTiers: bulkTiers.optional(),
   })
   .refine((value) => value.mrp >= value.price, {
     message: 'MRP cannot be lower than the selling price',
@@ -145,6 +168,7 @@ export const updateProductSchema = z
     highlights: highlights.optional(),
     specs: z.union([specs, z.null()]).optional(),
     offer: z.union([offer, z.null()]).optional(),
+    bulkTiers: z.union([bulkTiers, z.null()]).optional(),
   })
   .refine((value) => Object.keys(value).length > 0, {
     message: 'Provide at least one field to change',

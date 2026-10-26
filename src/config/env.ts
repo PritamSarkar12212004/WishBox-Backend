@@ -34,6 +34,13 @@ const envSchema = z
         (value) => value.startsWith('mongodb://') || value.startsWith('mongodb+srv://'),
         'MONGODB_URI must start with mongodb:// or mongodb+srv://',
       ),
+    /**
+     * The database to use when the URI does not name one. Atlas connection
+     * strings often omit it, and the driver would otherwise fall back to a
+     * database literally called "test" - which is how a staging dataset ends
+     * up next to production data.
+     */
+    MONGODB_DB: z.string().trim().default('wishbox'),
 
     CORS_ORIGIN: z.string().trim().default('*'),
 

@@ -37,6 +37,21 @@ export interface ProductOffer {
   label: string;
 }
 
+/**
+ * A quantity break: buying `minQty` or more changes the unit price.
+ *
+ * This has to live with the product rather than in the storefront, because the
+ * order service is the one that decides what a shopper is charged - a price the
+ * browser made up is a suggestion, not a total. `maxQty: null` is the open-ended
+ * top tier.
+ */
+export interface ProductBulkTier {
+  minQty: number;
+  maxQty: number | null;
+  /** Unit price in whole rupees once this tier applies. */
+  unitPrice: number;
+}
+
 export interface ProductAttributes {
   /** URL-safe identity, e.g. `premium-handmade-decorative-paper`. Unique. */
   slug: string;
@@ -67,6 +82,7 @@ export interface ProductAttributes {
   highlights: string[];
   specs?: ProductSpecs;
   offer?: ProductOffer;
+  bulkTiers?: ProductBulkTier[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -99,6 +115,7 @@ export interface PublicProduct {
   highlights: string[];
   specs?: ProductSpecs;
   offer?: ProductOffer;
+  bulkTiers?: ProductBulkTier[];
   createdAt: string;
   updatedAt: string;
 }
@@ -113,6 +130,15 @@ const specsSchema = new Schema<ProductSpecs>(
     width: { type: String, trim: true, maxlength: 30 },
     gsm: { type: String, trim: true, maxlength: 30 },
     packaging: { type: String, enum: PRODUCT_PACKAGING },
+  },
+  { _id: false },
+);
+
+const bulkTierSchema = new Schema<ProductBulkTier>(
+  {
+    minQty: { type: Number, required: true, min: 1 },
+    maxQty: { type: Number, default: null, min: 1 },
+    unitPrice: { type: Number, required: true, min: 1 },
   },
   { _id: false },
 );
@@ -150,6 +176,7 @@ const productSchema = new Schema<ProductAttributes>(
     highlights: { type: [String], default: [] },
     specs: { type: specsSchema },
     offer: { type: offerSchema },
+    bulkTiers: { type: [bulkTierSchema], default: undefined },
   },
   {
     timestamps: true,
@@ -191,6 +218,11 @@ export function toPublicProduct(product: ProductDocument): PublicProduct {
   // The subdocument exposes one getter per schema path, which is exactly the
   // shape `cleanSpecs` reads - no `toObject` needed, and no internals leak.
   const specs = product.specs ? cleanSpecs(product.specs as ProductSpecs) : undefined;
+  const bulkTiers = (product.bulkTiers ?? []).map((tier) => ({
+    minQty: tier.minQty,
+    maxQty: tier.maxQty ?? null,
+    unitPrice: tier.unitPrice,
+  }));
 
   return {
     id: product.slug,
@@ -218,6 +250,7 @@ export function toPublicProduct(product: ProductDocument): PublicProduct {
     ...(product.offer
       ? { offer: { code: product.offer.code, label: product.offer.label } }
       : {}),
+    ...(bulkTiers.length > 0 ? { bulkTiers } : {}),
     createdAt: product.createdAt.toISOString(),
     updatedAt: product.updatedAt.toISOString(),
   };

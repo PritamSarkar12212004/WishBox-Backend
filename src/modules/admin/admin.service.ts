@@ -158,7 +158,7 @@ export async function patchOrder(
   const updated = await AdminOrderModel.findOneAndUpdate(
     { orderId: id },
     { $set: update },
-    { new: true, runValidators: true },
+    { returnDocument: 'after', runValidators: true },
   ).lean();
 
   if (!updated) {
@@ -185,7 +185,7 @@ export async function patchReturn(id: string, status: ReturnStatus): Promise<Adm
   const updated = await AdminReturnModel.findOneAndUpdate(
     { returnId: id },
     { $set: update },
-    { new: true, runValidators: true },
+    { returnDocument: 'after', runValidators: true },
   ).lean();
 
   if (!updated) {
@@ -222,7 +222,7 @@ export async function patchReview(
   if (Object.keys($unset).length > 0) update.$unset = $unset;
 
   const updated = await AdminReviewModel.findOneAndUpdate({ reviewId: id }, update, {
-    new: true,
+    returnDocument: 'after',
     runValidators: true,
   }).lean();
 
@@ -254,7 +254,7 @@ export async function patchSettings(patch: AdminSettingsPatchInput): Promise<Adm
   const updated = await AdminSettingModel.findOneAndUpdate(
     { settingId: ADMIN_SETTINGS_ID },
     { $set: patch },
-    { new: true, upsert: true, setDefaultsOnInsert: true, runValidators: true },
+    { returnDocument: 'after', upsert: true, setDefaultsOnInsert: true, runValidators: true },
   ).lean();
 
   log.info({ fields: Object.keys(patch) }, 'Admin updated settings');

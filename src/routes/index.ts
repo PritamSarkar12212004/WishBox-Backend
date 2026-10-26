@@ -6,6 +6,9 @@ import { adminRouter } from "../modules/admin/admin.routes.js";
 import { addressesRouter } from "../modules/addresses/addresses.routes.js";
 import { categoriesRouter } from "../modules/categories/categories.routes.js";
 import { productsRouter } from "../modules/products/products.routes.js";
+import { ordersRouter, returnsRouter } from "../modules/orders/orders.routes.js";
+import { couponsRouter } from "../modules/coupons/coupons.routes.js";
+import { contentRouter } from "../modules/content/content.routes.js";
 import { sendSuccess } from "../shared/apiResponse.js";
 import { env } from "../config/env.js";
 
@@ -36,5 +39,15 @@ apiRouter.use("/addresses", addressesRouter);
 // "/admin", where the admin gate is applied once.
 apiRouter.use("/products", productsRouter);
 apiRouter.use("/categories", categoriesRouter);
+
+// Checkout and the shopper's own history. The admin's view of the same orders
+// lives under "/admin"; both read the one collection.
+apiRouter.use("/orders", ordersRouter);
+apiRouter.use("/returns", returnsRouter);
+apiRouter.use("/coupons", couponsRouter);
+
+// The website's own copy - alert bar, footer, contact page. Read by every
+// visitor, written only under "/admin/content".
+apiRouter.use("/content", contentRouter);
 
 apiRouter.use("/admin", adminRouter);

@@ -44,11 +44,6 @@ export interface AdminOrder {
   email: string;
   city: string;
   isGuest: boolean;
-  /**
-   * Always false here. The panel flips it on for the orders it merges in from
-   * this browser's own storefront session, which never reach the server.
-   */
-  isLive: boolean;
   placedAt: number;
   placedOn: string;
   status: AdminOrderStatus;
@@ -86,11 +81,10 @@ export interface AdminOrder {
 }
 
 /**
- * The stored document: every public field except the two the server owns.
- * `id` is persisted as `orderId` so Mongo's own `_id` stays out of the API, and
- * `isLive` is never stored because it describes a browser, not the business.
+ * The stored document: every public field except the one the server owns.
+ * `id` is persisted as `orderId` so Mongo's own `_id` stays out of the API.
  */
-export type AdminOrderAttributes = Omit<AdminOrder, 'id' | 'isLive'> & { orderId: string };
+export type AdminOrderAttributes = Omit<AdminOrder, 'id'> & { orderId: string };
 export type AdminOrderDocument = HydratedDocument<AdminOrderAttributes>;
 export type AdminOrderModelType = Model<AdminOrderAttributes>;
 
@@ -155,5 +149,5 @@ export const AdminOrderModel = model<AdminOrderAttributes>('AdminOrder', orderSc
  */
 export function toPublicOrder(doc: AdminOrderAttributes & { _id?: unknown }): AdminOrder {
   const { _id, orderId, ...rest } = doc;
-  return { id: orderId, isLive: false, ...rest };
+  return { id: orderId, ...rest };
 }

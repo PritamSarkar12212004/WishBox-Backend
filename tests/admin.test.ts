@@ -327,7 +327,6 @@ describe('GET /admin/dataset', () => {
     const order = (res.body.data as { orders: Record<string, unknown>[] }).orders[0];
 
     assert.equal(order.id, ORDER_ID);
-    assert.equal(order.isLive, false);
     assert.equal(order.customer, 'Test Shopper');
     assert.deepEqual((order.items as unknown[]).length, 1);
     // Mongo's key must never reach the client.

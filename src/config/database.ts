@@ -20,6 +20,23 @@ function safeUri(uri: string): string {
 
 let listenersRegistered = false;
 
+/**
+ * The database this connection talks to.
+ *
+ * A URI that already names a database keeps it; one that stops at the host (as
+ * Atlas hands them out) gets `MONGODB_DB` instead of the driver's "test"
+ * default, so the app never quietly writes to a scratch database.
+ */
+function resolveDbName(uri: string): string | undefined {
+  const withoutScheme = uri.replace(/^mongodb(\+srv)?:\/\//, '');
+  const hostAndPath = withoutScheme.slice(withoutScheme.indexOf('@') + 1);
+  const slash = hostAndPath.indexOf('/');
+  if (slash === -1) return env.MONGODB_DB;
+
+  const path = hostAndPath.slice(slash + 1).split('?')[0]?.trim();
+  return path ? undefined : env.MONGODB_DB;
+}
+
 function registerConnectionListeners(): void {
   if (listenersRegistered) return;
   listenersRegistered = true;
@@ -49,7 +66,11 @@ export async function connectDatabase(): Promise<typeof mongoose> {
     try {
       mongoose.set('strictQuery', true);
 
+      const dbName = resolveDbName(env.MONGODB_URI);
+      if (dbName) log.info({ database: dbName }, 'No database in MONGODB_URI, using MONGODB_DB');
+
       await mongoose.connect(env.MONGODB_URI, {
+        ...(dbName ? { dbName } : {}),
         serverSelectionTimeoutMS: 10_000,
         socketTimeoutMS: 45_000,
         maxPoolSize: 10,

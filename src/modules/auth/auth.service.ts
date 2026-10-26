@@ -85,7 +85,7 @@ export async function requestOtp(phone: string): Promise<RequestOtpResult> {
       $set: { codeHash, attempts: 0, expiresAt, lastSentAt: now },
       $unset: { consumedAt: 1 },
     },
-    { upsert: true, new: true, setDefaultsOnInsert: true },
+    { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true },
   );
 
   try {
@@ -219,7 +219,7 @@ export async function verifyOtp(
     const updated = await OtpModel.findByIdAndUpdate(
       challenge._id,
       { $inc: { attempts: 1 } },
-      { new: true },
+      { returnDocument: 'after' },
     );
     const attemptsRemaining = Math.max(
       0,

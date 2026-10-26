@@ -8,10 +8,12 @@ import {
   removeProductImages,
   replacedImageUrls,
 } from './products.media.js';
+import { bulkTiersAreValid } from './products.pricing.js';
 import {
   ProductModel,
   toPublicProduct,
   type ProductAttributes,
+  type ProductBulkTier,
   type ProductSpecs,
   type PublicProduct,
 } from './products.model.js';
@@ -119,6 +121,18 @@ function normaliseSpecs(specs: ProductSpecs | undefined | null): ProductSpecs | 
   return specs;
 }
 
+/**
+ * Quantity breaks are only accepted when they can be applied: ordered, and never
+ * above the list price (which would charge a bulk buyer *more*).
+ */
+function assertBulkTiers(tiers: ProductBulkTier[] | undefined, price: number): void {
+  if (!bulkTiersAreValid(tiers, price)) {
+    throw new ValidationError('These quantity breaks cannot be applied to that price', {
+      bulkTiers: 'List them smallest minimum first, with a unit price at or below the price',
+    });
+  }
+}
+
 async function assertSlugIsFree(slug: string, exceptId?: string): Promise<void> {
   const existing = await ProductModel.findOne({ slug });
   if (existing && existing.id !== exceptId) {
@@ -144,6 +158,7 @@ export async function createProduct(input: CreateProductInput): Promise<PublicPr
   await assertSkuIsFree(input.sku);
 
   const specs = normaliseSpecs(input.specs);
+  assertBulkTiers(input.bulkTiers, input.price);
 
   const product = await ProductModel.create({
     slug,
@@ -170,6 +185,7 @@ export async function createProduct(input: CreateProductInput): Promise<PublicPr
     highlights: input.highlights,
     ...(specs ? { specs } : {}),
     ...(input.offer ? { offer: input.offer } : {}),
+    ...(input.bulkTiers && input.bulkTiers.length > 0 ? { bulkTiers: input.bulkTiers } : {}),
   });
 
   log.info({ slug, category: product.category }, 'Product created');
@@ -232,6 +248,14 @@ export async function updateProduct(
   if (input.videoUrl !== undefined) product.videoUrl = input.videoUrl || undefined;
   if (input.specs !== undefined) product.specs = normaliseSpecs(input.specs);
   if (input.offer !== undefined) product.offer = input.offer ?? undefined;
+  if (input.bulkTiers !== undefined) {
+    const tiers = input.bulkTiers ?? undefined;
+    assertBulkTiers(tiers, input.price ?? product.price);
+    product.bulkTiers = tiers && tiers.length > 0 ? tiers : undefined;
+  }
+
+  // A price edit can invalidate breaks that were fine when they were saved.
+  if (input.price !== undefined) assertBulkTiers(product.bulkTiers, product.price);
 
   if (product.mrp < product.price) {
     throw new ValidationError('MRP cannot be lower than the selling price', {
