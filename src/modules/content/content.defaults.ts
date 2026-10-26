@@ -11,7 +11,8 @@ import type { SiteContent } from './content.types.js';
 export const DEFAULT_SITE_CONTENT: SiteContent = {
   alert: {
     phone: '+91 98765 43210',
-    email: 'support@wishbox.in',
+    // One storefront address everywhere: alert, footer, contact and settings.
+    email: 'hello@wishbox.in',
     messages: [
       { id: 'paper-lanterns', text: '50% OFF PAPER LANTERNS' },
       { id: 'origami-sets', text: 'BUY 2 GET 1 FREE ON ORIGAMI SETS' },

@@ -11,6 +11,12 @@ export type CloudinaryResourceType = 'image' | 'video' | 'raw' | 'auto';
  */
 export interface UploadImageInput {
   file: string;
+  /**
+   * `image` (the default) or `raw` for a document such as a catalogue PDF.
+   * Cloudinary stores the two in different delivery paths, so the choice has
+   * to travel with the upload rather than be inferred from the file.
+   */
+  resourceType?: 'image' | 'raw';
   /** Defaults to `CLOUDINARY_FOLDER` (`wishbox`). */
   folder?: string;
   /** Force a stable public id instead of a random one. */

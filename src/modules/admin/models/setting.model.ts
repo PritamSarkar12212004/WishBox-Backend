@@ -27,7 +27,8 @@ export interface AdminSettings {
 /** The values the API serves before an admin has saved anything. */
 export const DEFAULT_ADMIN_SETTINGS: AdminSettings = {
   storeName: 'WishBox',
-  supportEmail: 'support@papercraft.in',
+  // The storefront's one address, so the panel and the site never disagree.
+  supportEmail: 'hello@wishbox.in',
   supportPhone: '+91 98765 43210',
   lowStockThreshold: 10,
   freeShippingThreshold: 999,

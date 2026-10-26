@@ -29,6 +29,12 @@ export type AdminReviewView = AdminReview & { reply?: ReviewReply };
 
 export type AdminReviewAttributes = Omit<AdminReview, 'id'> & {
   reviewId: string;
+  /**
+   * The shopper who wrote it. Present on reviews written in the storefront, so
+   * one account has one review per product and the panel can tell a real
+   * customer review from a seeded row.
+   */
+  userId?: string;
   reply?: ReviewReply;
 };
 export type AdminReviewDocument = HydratedDocument<AdminReviewAttributes>;
@@ -53,6 +59,7 @@ const reviewSchema = new Schema<AdminReviewAttributes>(
     rating: { type: Number, required: true, min: 1, max: 5 },
     title: { type: String, default: '' },
     comment: { type: String, default: '' },
+    userId: { type: String, trim: true, index: true },
     createdAt: { type: Number, required: true, index: true },
     helpful: { type: Number, default: 0 },
     status: { type: String, enum: REVIEW_STATUSES, default: 'Pending', index: true },

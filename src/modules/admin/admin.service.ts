@@ -43,6 +43,9 @@ import type {
   AdminReviewPatchInput,
   AdminSettingsPatchInput,
 } from './admin.validation.js';
+import { listAllSaves, type AdminWishlistEntry } from '../wishlist/wishlist.service.js';
+import { listAllCartInterest, type AdminCartInterest } from '../cart/cart.service.js';
+import { recalculateProductRating } from '../reviews/reviews.service.js';
 
 const log = createChildLogger('admin');
 
@@ -66,17 +69,24 @@ export interface AdminDataset {
   reviews: AdminReviewView[];
   coupons: AdminCoupon[];
   restocks: AdminRestock[];
+  /** Every wishlist save, joined with its product and shopper. */
+  wishlist: AdminWishlistEntry[];
+  /** Every shopper's add-to-cart interest, joined the same way. */
+  cartInterest: AdminCartInterest[];
 }
 
 export async function getDataset(): Promise<AdminDataset> {
-  const [orders, customers, returns, reviews, coupons, restocks] = await Promise.all([
-    AdminOrderModel.find().sort({ placedAt: -1 }).lean(),
-    AdminCustomerModel.find().sort({ joinedAt: -1 }).lean(),
-    AdminReturnModel.find().sort({ requestedAt: -1 }).lean(),
-    AdminReviewModel.find().sort({ createdAt: -1 }).lean(),
-    AdminCouponModel.find().sort({ code: 1 }).lean(),
-    AdminRestockModel.find().sort({ at: -1 }).lean(),
-  ]);
+  const [orders, customers, returns, reviews, coupons, restocks, wishlist, cartInterest] =
+    await Promise.all([
+      AdminOrderModel.find().sort({ placedAt: -1 }).lean(),
+      AdminCustomerModel.find().sort({ joinedAt: -1 }).lean(),
+      AdminReturnModel.find().sort({ requestedAt: -1 }).lean(),
+      AdminReviewModel.find().sort({ createdAt: -1 }).lean(),
+      AdminCouponModel.find().sort({ code: 1 }).lean(),
+      AdminRestockModel.find().sort({ at: -1 }).lean(),
+      listAllSaves(),
+      listAllCartInterest(),
+    ]);
 
   return {
     generatedAt: Date.now(),
@@ -86,6 +96,8 @@ export async function getDataset(): Promise<AdminDataset> {
     reviews: reviews.map(toPublicReview),
     coupons: coupons.map(toPublicCoupon),
     restocks: restocks.map(toPublicRestock),
+    wishlist,
+    cartInterest,
   };
 }
 
@@ -230,15 +242,23 @@ export async function patchReview(
     throw new NotFoundError(`Review ${id} was not found`);
   }
 
+  // Publishing, unpublishing or replying changes what the storefront counts, so
+  // the product's rating is recomputed from the reviews that are live now.
+  if (patch.status !== undefined) {
+    await recalculateProductRating(updated.productId);
+  }
+
   log.info({ reviewId: id, actor, fields: Object.keys(patch) }, 'Admin moderated a review');
   return toPublicReview(updated);
 }
 
 export async function deleteReview(id: string): Promise<void> {
-  const removed = await AdminReviewModel.deleteOne({ reviewId: id });
-  if (removed.deletedCount === 0) {
+  const removed = await AdminReviewModel.findOneAndDelete({ reviewId: id }).lean();
+  if (!removed) {
     throw new NotFoundError(`Review ${id} was not found`);
   }
+
+  await recalculateProductRating(removed.productId);
 
   log.info({ reviewId: id }, 'Admin deleted a review');
 }

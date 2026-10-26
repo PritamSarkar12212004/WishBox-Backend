@@ -143,6 +143,9 @@ header and in the response body, and included in every log line.
 | GET    | `/api/v1/orders/:id`       | ✅ | One of the shopper's orders              |
 | POST   | `/api/v1/orders/:id/returns` | ✅ | Raise a return on a delivered order    |
 | GET    | `/api/v1/returns`          | ✅ | The shopper's own return requests        |
+| GET    | `/api/v1/wishlist`         | ✅ | The shopper's saved product ids          |
+| PUT    | `/api/v1/wishlist/:productId` | ✅ | Save a product (idempotent: one row per shopper per product) |
+| DELETE | `/api/v1/wishlist/:productId` | ✅ | Remove a saved product                 |
 | POST   | `/api/v1/admin/products`   | 🛡️ | Create a product (201)                   |
 | GET    | `/api/v1/admin/products`   | 🛡️ | Every product, drafts included           |
 | GET    | `/api/v1/admin/products/:slug` | 🛡️ | One product, draft or published      |

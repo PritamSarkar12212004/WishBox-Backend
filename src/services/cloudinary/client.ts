@@ -95,7 +95,8 @@ export async function uploadImage(input: UploadImageInput): Promise<CloudinaryUp
   if (tags) params.tags = tags;
 
   const payload = { file, ...signedPayload(apiSecret, apiKey, params) };
-  const url = resourceUrl('upload');
+  // `raw` keeps a PDF's bytes and extension intact; `image` runs image processing.
+  const url = resourceUrl('upload', input.resourceType === 'raw' ? 'raw' : 'image');
 
   let lastError: unknown = null;
 
@@ -114,7 +115,7 @@ export async function uploadImage(input: UploadImageInput): Promise<CloudinaryUp
 
       log.info(
         { publicId: parsed.public_id, folder, bytes: parsed.bytes, attempt },
-        'Image uploaded',
+        'Asset uploaded',
       );
       return toUploadResult(parsed);
     } catch (error) {
