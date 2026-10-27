@@ -122,6 +122,7 @@ describe('website content', () => {
   it('serves the shipped content before anything is saved', async () => {
     const content = await getContent();
 
+    assert.deepEqual(content.home, DEFAULT_SITE_CONTENT.home);
     assert.deepEqual(content.alert, DEFAULT_SITE_CONTENT.alert);
     assert.deepEqual(content.footer, DEFAULT_SITE_CONTENT.footer);
     assert.deepEqual(content.contact, DEFAULT_SITE_CONTENT.contact);

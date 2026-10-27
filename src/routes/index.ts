@@ -5,6 +5,7 @@ import { meRouter, userRouter } from "../modules/user/user.routes.js";
 import { adminRouter } from "../modules/admin/admin.routes.js";
 import { addressesRouter } from "../modules/addresses/addresses.routes.js";
 import { categoriesRouter } from "../modules/categories/categories.routes.js";
+import { cataloguesRouter } from "../modules/catalogues/catalogues.routes.js";
 import { productsRouter } from "../modules/products/products.routes.js";
 import { ordersRouter, returnsRouter } from "../modules/orders/orders.routes.js";
 import { couponsRouter } from "../modules/coupons/coupons.routes.js";
@@ -45,6 +46,9 @@ apiRouter.use("/products", productsRouter);
 // writes their own. The admin panel moderates the same rows from "/admin".
 apiRouter.use("/products", productReviewsRouter);
 apiRouter.use("/categories", categoriesRouter);
+// Catalogues that belong to no category (lookbooks, trade lists). Public read;
+// the admin's upload/delete routes are mounted under "/admin".
+apiRouter.use("/catalogues", cataloguesRouter);
 
 // Checkout and the shopper's own history. The admin's view of the same orders
 // lives under "/admin"; both read the one collection.

@@ -9,6 +9,14 @@ import type { SiteContent } from './content.types.js';
  * is the one authority once it answers.
  */
 export const DEFAULT_SITE_CONTENT: SiteContent = {
+  home: {
+    hero: {
+      eyebrow: 'Handmade in Jaipur',
+      title: 'Paper & décor for the moments you want to remember',
+      lead: 'Small-batch handmade paper, gift wrap and home décor — pressed, cut and finished by hand, then shipped across India.',
+    },
+  },
+
   alert: {
     phone: '+91 98765 43210',
     // One storefront address everywhere: alert, footer, contact and settings.

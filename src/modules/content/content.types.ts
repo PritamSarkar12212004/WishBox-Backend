@@ -81,7 +81,16 @@ export type ContactContent = {
 };
 
 /** Everything the storefront renders that is edited in the panel. */
+export type HomeContent = {
+  hero: {
+    eyebrow: string;
+    title: string;
+    lead: string;
+  };
+};
+
 export type SiteContent = {
+  home: HomeContent;
   alert: AlertContent;
   footer: FooterContent;
   contact: ContactContent;

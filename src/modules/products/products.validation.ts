@@ -108,6 +108,9 @@ export const createProductSchema = z
     brand,
     /** Must be an existing category slug - the service checks that. */
     category: slug,
+    /* Accepted so an older panel build does not fail validation, but the
+     * service ignores both: a product's rating is the average of its published
+     * reviews, and a new product starts unrated. */
     rating: rating.default(0),
     reviewCount: z.coerce.number().int().min(0).default(0),
     price: rupees,
@@ -152,6 +155,7 @@ export const updateProductSchema = z
     sku: sku.optional(),
     brand: brand.optional(),
     category: slug.optional(),
+    /* Ignored by the service: only the review pipeline writes these. */
     rating: rating.optional(),
     reviewCount: z.coerce.number().int().min(0).optional(),
     price: rupees.optional(),

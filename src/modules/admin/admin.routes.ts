@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { requireAuth, validate } from '../../middleware/index.js';
 import { categoryAdminRouter } from '../categories/categories.routes.js';
+import { catalogueAdminRouter } from '../catalogues/catalogues.routes.js';
 import { getContent, patchContent } from '../content/content.controller.js';
 import { contentPatchSchema } from '../content/content.validation.js';
 import { productAdminRouter } from '../products/products.routes.js';
@@ -67,4 +68,6 @@ adminRouter.delete('/reviews/:id', validate({ params: adminIdParamSchema }), del
  */
 adminRouter.use('/products', productAdminRouter);
 adminRouter.use('/categories', categoryAdminRouter);
+/* Catalogues that are not tied to a category - upload, list, remove. */
+adminRouter.use('/catalogues', catalogueAdminRouter);
 adminRouter.use('/uploads', uploadAdminRouter);

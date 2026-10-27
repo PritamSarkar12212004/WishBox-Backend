@@ -8,6 +8,12 @@ import { Schema, model, type HydratedDocument, type Model } from 'mongoose';
  * makes "what is the current configuration?" answerable at a glance.
  */
 export interface AdminSettings {
+  /**
+   * Legacy: the store's display name now lives in the website content
+   * (`footer.storeName`), which `GET /content` serves publicly so the
+   * storefront can render it. Kept so older documents stay valid; the panel no
+   * longer reads or writes it.
+   */
   storeName: string;
   supportEmail: string;
   supportPhone: string;

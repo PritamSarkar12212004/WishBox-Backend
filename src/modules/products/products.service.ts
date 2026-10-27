@@ -166,8 +166,13 @@ export async function createProduct(input: CreateProductInput): Promise<PublicPr
     name: input.name,
     brand: input.brand,
     category: input.category,
-    rating: input.rating,
-    reviewCount: input.reviewCount,
+    /*
+     * Rating is never written by hand: it is the average of the reviews
+     * customers publish, rebuilt by `recalculateProductRating` whenever one is
+     * written or moderated. A new product therefore starts unrated.
+     */
+    rating: 0,
+    reviewCount: 0,
     price: input.price,
     mrp: input.mrp,
     ...(input.badge ? { badge: input.badge } : {}),
@@ -229,8 +234,8 @@ export async function updateProduct(
 
   if (input.name !== undefined) product.name = input.name;
   if (input.brand !== undefined) product.brand = input.brand;
-  if (input.rating !== undefined) product.rating = input.rating;
-  if (input.reviewCount !== undefined) product.reviewCount = input.reviewCount;
+  /* `rating` / `reviewCount` in the payload are deliberately ignored: the only
+   * writer is the review pipeline, so the panel cannot inflate a score. */
   if (input.price !== undefined) product.price = input.price;
   if (input.mrp !== undefined) product.mrp = input.mrp;
   if (input.available !== undefined) product.available = input.available;

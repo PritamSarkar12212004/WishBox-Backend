@@ -6,10 +6,10 @@
  *
  * Two documents, because the storefront reads two:
  *
- *  - **Site content** (`sitecontents`): the alert strip, the footer (store name,
- *    tagline, phone, email, address, Instagram and WhatsApp links) and the
- *    contact page (WhatsApp/email cards, studio address, support hours, social
- *    link, topics).
+ *  - **Site content** (`sitecontents`): the home hero, the alert strip, the
+ *    footer (store name, tagline, phone, email, address, Instagram and WhatsApp
+ *    links) and the contact page (WhatsApp/email cards, studio address, support
+ *    hours, social link, topics).
  *  - **Store settings** (`adminsettings`): store name, support email and phone,
  *    plus the operational values the panel and storefront share.
  *
@@ -77,6 +77,10 @@ async function main(): Promise<void> {
     {
       contentAction,
       settingsAction,
+      home: {
+        eyebrow: storedContent.home.hero.eyebrow,
+        title: storedContent.home.hero.title,
+      },
       alert: {
         phone: storedContent.alert.phone,
         email: storedContent.alert.email,
